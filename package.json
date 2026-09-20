@@ -36,7 +36,7 @@
     "@metaplex-foundation/umi": "^1.5.1",
     "@metaplex-foundation/umi-bundle-defaults": "^1.5.1",
     "@metaplex-foundation/umi-web3js-adapters": "^1.5.1",
-    "bigint-buffer": "file:vendor/bigint-buffer"
+    "@solana/buffer-layout-utils": "file:vendor/solana-buffer-layout-utils"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
@@ -50,7 +50,6 @@
   },
   "type": "module",
   "overrides": {
-    "bigint-buffer": "$bigint-buffer",
     "toml": "4.2.0"
   }
 }
