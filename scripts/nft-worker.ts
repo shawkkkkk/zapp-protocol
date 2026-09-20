@@ -17,8 +17,13 @@ import {
   type DecodedTx,
 } from "../src/lib/server/zcash.ts";
 
-const POSTAGE_ZATS = BigInt(process.env.ZAPP_NFT_POSTAGE_ZATS || "546");
+const MARKER_ZATS = BigInt(process.env.ZCASH_MARKER_ZATS || "546");
+const POSTAGE_ZATS = BigInt(process.env.ZAPP_NFT_POSTAGE_ZATS || MARKER_ZATS.toString());
 const REVEAL_FEE_ZATS = BigInt(process.env.ZAPP_NFT_REVEAL_FEE_ZATS || "50000");
+
+if (POSTAGE_ZATS !== MARKER_ZATS) {
+  throw new Error("ZAPP_NFT_POSTAGE_ZATS must equal ZCASH_MARKER_ZATS");
+}
 const SIGNER_BIN =
   process.env.ZAPP_INSCRIPTION_SIGNER_BIN ||
   "native/zapp-zcash-signer/target/release/zapp-zcash-signer";
