@@ -42,3 +42,11 @@ if (process.env.ZAPP_INDEXER_ENABLED === "true") {
 } else {
   console.log("ZApp backend: Zcash indexer disabled until mainnet relay is configured");
 }
+
+
+if (process.env.ZAPP_SOLANA_WATCHER_ENABLED === "true") {
+  console.log("ZApp backend: Solana burn watcher enabled");
+  start("solana-watcher", "scripts/watch-solana.ts");
+} else {
+  console.log("ZApp backend: Solana burn watcher disabled until production RPC is configured");
+}
