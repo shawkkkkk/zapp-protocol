@@ -1703,3 +1703,116 @@ a.leaderboard-row:hover {
     grid-column: 2;
   }
 }
+
+
+.docs-page {
+  padding: 72px 0 96px;
+  max-width: 980px;
+}
+.docs-page > h1 {
+  max-width: 820px;
+  margin: 10px 0 18px;
+  font-size: clamp(48px, 7vw, 82px);
+  line-height: .95;
+  letter-spacing: -.06em;
+}
+.docs-lede {
+  max-width: 760px;
+  margin: 0 0 34px;
+  color: #b6aa89;
+  font-size: 15px;
+  line-height: 1.7;
+}
+.docs-sections {
+  border-top: 1px solid var(--line);
+}
+.docs-sections > section {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  gap: 18px;
+  padding: 26px 0;
+  border-bottom: 1px solid var(--line);
+}
+.docs-sections > section > span {
+  color: var(--acid);
+  font: 800 10px "SFMono-Regular", Consolas, monospace;
+}
+.docs-sections h2 {
+  margin: 0 0 10px;
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -.025em;
+}
+.docs-sections p {
+  max-width: 760px;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.65;
+}
+.docs-warning {
+  margin-top: 16px;
+  padding: 14px;
+  border-left: 2px solid #ff8f78;
+  background: rgba(255,143,120,.035);
+}
+.docs-warning b {
+  color: #ffad9b;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.docs-warning p {
+  margin-top: 5px;
+}
+.docs-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 30px;
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+}
+.docs-grid > div {
+  padding: 16px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.docs-grid span {
+  display: block;
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: .1em;
+}
+.docs-grid b {
+  display: block;
+  margin-top: 7px;
+  color: #eee4c7;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.docs-disclaimer {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+.docs-disclaimer b {
+  color: var(--acid);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.docs-disclaimer p {
+  max-width: 760px;
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+@media (max-width: 620px) {
+  .docs-grid {
+    grid-template-columns: 1fr;
+  }
+  .docs-sections > section {
+    grid-template-columns: 34px 1fr;
+  }
+}
