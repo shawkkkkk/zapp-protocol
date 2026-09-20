@@ -11,6 +11,7 @@ import {
   reserveClaim,
 } from "@/lib/server/db";
 import { encodeNftContent, nftContentCommitment, nftContentForBurn } from "@/lib/nft";
+import { enforceRateLimit, RateLimitError, rateLimitResponse } from "@/lib/server/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,6 +52,13 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as { solanaSignature?: string };
     const signature = body.solanaSignature?.trim();
     if (!signature) return NextResponse.json({ error: "solanaSignature is required" }, { status: 400 });
+
+    await enforceRateLimit(request, {
+      namespace: "claim-submit",
+      limit: 120,
+      windowSeconds: 3600,
+      identity: signature,
+    });
 
     const evidence = await verifyBurnRaw(signature);
 
@@ -114,6 +122,7 @@ export async function POST(request: NextRequest) {
       { status: claim.status === "broadcast" || claim.status === "confirmed" ? 200 : 202 },
     );
   } catch (error) {
+    if (error instanceof RateLimitError) return rateLimitResponse(error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Claim failed" },
       { status: 400 },
