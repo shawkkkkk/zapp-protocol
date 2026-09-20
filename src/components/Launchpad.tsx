@@ -57,6 +57,7 @@ export function Launchpad({
     nft?: string;
   }>({});
   const [recoverySignature, setRecoverySignature] = useState("");
+  const [reviewing, setReviewing] = useState(false);
 
   async function watchNft(burnId: string) {
     for (let attempt = 0; attempt < 180; attempt += 1) {
@@ -158,7 +159,20 @@ export function Launchpad({
       setMessage("Connect a Solana wallet first.");
       return;
     }
+    if (!mint.trim()) {
+      setMessage("A Solana mint is required.");
+      return;
+    }
+    if (!amount.trim()) {
+      setMessage("Enter the amount you want to destroy.");
+      return;
+    }
+    if (!zcashAddress.trim()) {
+      setMessage("Enter the Zcash destination for the resulting proof.");
+      return;
+    }
 
+    setReviewing(false);
     setResult({});
     try {
       setStage("signing");
@@ -272,16 +286,87 @@ export function Launchpad({
           </small>
         </label>
 
-        <button
-          className="primary"
-          disabled={
-            !launchEnabled ||
-            (stage !== "idle" && stage !== "done")
-          }
-          onClick={migrate}
-        >
-          {buttonText}
-        </button>
+        {reviewing && stage === "idle" && (
+          <div className="burn-review">
+            <div className="burn-review-head">
+              <b>Review permanent burn</b>
+              <span>This cannot be reversed.</span>
+            </div>
+            <div className="burn-review-grid">
+              <div>
+                <span>Destroy</span>
+                <strong>
+                  {amount || "—"} {initialSymbol ? "$" + initialSymbol : ""}
+                </strong>
+              </div>
+              <div>
+                <span>Solana mint</span>
+                <code>{mint || "—"}</code>
+              </div>
+              <div>
+                <span>Zcash destination</span>
+                <code>{zcashAddress || "—"}</code>
+              </div>
+            </div>
+            <p>
+              Signing destroys these tokens on Solana. ZApp cannot restore,
+              refund, or redirect them afterward. The Zcash destination above is
+              committed in the same transaction.
+            </p>
+            <div className="burn-review-actions">
+              <button
+                className="secondary"
+                type="button"
+                onClick={() => setReviewing(false)}
+              >
+                Go back
+              </button>
+              <button
+                className="primary danger-confirm"
+                type="button"
+                onClick={migrate}
+              >
+                Confirm permanent burn
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!reviewing && (
+          <button
+            className="primary"
+            disabled={
+              !launchEnabled ||
+              (stage !== "idle" && stage !== "done")
+            }
+            onClick={() => {
+              setMessage("");
+              if (!launchEnabled) {
+                setMessage(
+                  "ZApp is in preview mode. Public burns are locked until production readiness passes.",
+                );
+                return;
+              }
+              if (!publicKey) {
+                setMessage("Connect a Solana wallet first.");
+                return;
+              }
+              if (!mint.trim() || !amount.trim() || !zcashAddress.trim()) {
+                setMessage("Complete the mint, amount, and Zcash destination first.");
+                return;
+              }
+              setReviewing(true);
+            }}
+          >
+            Review burn
+          </button>
+        )}
+
+        {stage !== "idle" && stage !== "done" && (
+          <button className="primary" disabled>
+            {buttonText}
+          </button>
+        )}
 
         <div className="launch-divider">
           <span>already burned?</span>
