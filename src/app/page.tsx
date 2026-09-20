@@ -26,6 +26,10 @@ export default function Home() {
           <span>Real Zcash NFT</span>
           <span>Publicly verifiable</span>
         </div>
+        <p className="hero-disclosure">
+          ZApp NFTs are live-protocol claim objects, not native ZSAs. Native shielded asset
+          migration depends on whatever Zcash actually activates later.
+        </p>
       </section>
 
       <Launchpad />
