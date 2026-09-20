@@ -411,6 +411,8 @@ export type AssetRow = {
   website_url: string | null;
   x_url: string | null;
   min_burn_base_units: string;
+  creation_signature: string | null;
+  registration_signature: string | null;
   launch_slot: string;
   enabled: boolean;
   created_at: string;
@@ -428,30 +430,67 @@ export async function upsertAsset(input: {
   websiteUrl?: string | null;
   xUrl?: string | null;
   minBurnBaseUnits: string;
+  creationSignature: string;
+  registrationSignature: string;
   launchSlot: number;
 }): Promise<AssetRow> {
-  const result = await database().query<AssetRow>(
+  const db = database();
+  const inserted = await db.query<AssetRow>(
     `INSERT INTO assets (
-      mint,token_program,name,symbol,decimals,creator,image_url,description,website_url,x_url,min_burn_base_units,launch_slot
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-    ON CONFLICT (mint) DO UPDATE SET
-      name=EXCLUDED.name,
-      symbol=EXCLUDED.symbol,
-      image_url=EXCLUDED.image_url,
-      description=EXCLUDED.description,
-      website_url=EXCLUDED.website_url,
-      x_url=EXCLUDED.x_url,
-      min_burn_base_units=EXCLUDED.min_burn_base_units
-    WHERE assets.creator=EXCLUDED.creator
+      mint,token_program,name,symbol,decimals,creator,image_url,description,
+      website_url,x_url,min_burn_base_units,creation_signature,
+      registration_signature,launch_slot
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+    ON CONFLICT (mint) DO NOTHING
     RETURNING *`,
     [
-      input.mint,input.tokenProgram,input.name,input.symbol,input.decimals,input.creator,
-      input.imageUrl || null,input.description || null,input.websiteUrl || null,input.xUrl || null,
-      input.minBurnBaseUnits,input.launchSlot,
+      input.mint,
+      input.tokenProgram,
+      input.name,
+      input.symbol,
+      input.decimals,
+      input.creator,
+      input.imageUrl || null,
+      input.description || null,
+      input.websiteUrl || null,
+      input.xUrl || null,
+      input.minBurnBaseUnits,
+      input.creationSignature,
+      input.registrationSignature,
+      input.launchSlot,
     ],
   );
-  if (!result.rows[0]) throw new Error("This mint is already registered by a different creator");
-  return result.rows[0];
+  if (inserted.rows[0]) return inserted.rows[0];
+
+  const existingResult = await db.query<AssetRow>(
+    "SELECT * FROM assets WHERE mint=$1",
+    [input.mint],
+  );
+  const existing = existingResult.rows[0];
+  if (!existing) throw new Error("Launch registration conflicted; retry");
+
+  const same =
+    existing.creator === input.creator &&
+    existing.token_program === input.tokenProgram &&
+    existing.name === input.name &&
+    existing.symbol === input.symbol &&
+    existing.decimals === input.decimals &&
+    existing.image_url === (input.imageUrl || null) &&
+    existing.description === (input.description || null) &&
+    existing.website_url === (input.websiteUrl || null) &&
+    existing.x_url === (input.xUrl || null) &&
+    existing.min_burn_base_units === input.minBurnBaseUnits &&
+    existing.creation_signature === input.creationSignature &&
+    existing.registration_signature === input.registrationSignature;
+
+  if (!same) {
+    throw new Error(
+      existing.creator === input.creator
+        ? "Launch metadata is immutable after registration"
+        : "This mint is already registered by a different creator",
+    );
+  }
+  return existing;
 }
 
 export async function getAsset(mint: string): Promise<AssetRow | null> {
