@@ -2,56 +2,83 @@
 
 import { useEffect, useState } from "react";
 
-type Claim = {
+type Nft = {
   burnId: string;
-  solanaSignature: string;
   mint: string;
   amountBaseUnits: string;
   recipient: string;
   currentOwner: string | null;
-  ownerOutpoint: string | null;
-  zcashTxid: string | null;
-  zcashHeight: string | null;
+  symbol: string | null;
+  name: string | null;
   status: string;
+  commitTxid: string | null;
+  revealTxid: string | null;
+  inscriptionId: string | null;
+  contentSha256: string;
+  error: string | null;
 };
 
 export default function Explorer() {
-  const [claims, setClaims] = useState<Claim[]>([]);
+  const [nfts, setNfts] = useState<Nft[]>([]);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch("/api/claims?limit=100")
-      .then(async (r) => {
-        const body = await r.json();
-        if (!r.ok) throw new Error(body.error || "Unable to load proofs");
-        setClaims(body.claims || []);
-      })
-      .catch((e) => setError(e.message));
+    const load = () =>
+      fetch("/api/nfts?limit=100")
+        .then(async (r) => {
+          const body = await r.json();
+          if (!r.ok) throw new Error(body.error || "Unable to load NFT mints");
+          setNfts(body.nfts || []);
+        })
+        .catch((e) => setError(e.message));
+    load();
+    const timer = window.setInterval(load, 5000);
+    return () => window.clearInterval(timer);
   }, []);
 
   return (
     <main className="shell explorer">
       <a className="brand" href="/">ZApp</a>
       <div className="sectionhead">
-        <div className="eyebrow">CANONICAL INDEX</div>
-        <h1>Proof explorer</h1>
-        <p>Every confirmed entry is reproducible from public Solana and Zcash chain data.</p>
+        <div className="eyebrow">PUBLIC MINT QUEUE</div>
+        <h1>Zcash NFT explorer</h1>
+        <p>Every row starts with a finalized Solana burn and ends with a collectible inscription on Zcash.</p>
       </div>
       {error && <div className="notice">{error}</div>}
       <div className="tablewrap">
         <table>
-          <thead><tr><th>Status</th><th>Mint</th><th>Amount</th><th>Current owner</th><th>Zcash</th></tr></thead>
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Asset</th>
+              <th>Amount</th>
+              <th>Owner</th>
+              <th>Inscription</th>
+            </tr>
+          </thead>
           <tbody>
-            {claims.map((claim) => (
-              <tr key={claim.burnId}>
-                <td><span className={`status ${claim.status}`}>{claim.status}</span></td>
-                <td><code>{claim.mint.slice(0, 8)}…{claim.mint.slice(-6)}</code></td>
-                <td>{claim.amountBaseUnits}</td>
-                <td><code>{(claim.currentOwner || claim.recipient).slice(0, 8)}…{(claim.currentOwner || claim.recipient).slice(-6)}</code></td>
-                <td><code>{claim.zcashTxid ? `${claim.zcashTxid.slice(0, 10)}…` : "pending"}</code></td>
+            {nfts.map((nft) => (
+              <tr key={nft.burnId}>
+                <td><span className={"status " + nft.status}>{nft.status}</span></td>
+                <td>
+                  <a className="textlink" href={"/asset/" + nft.mint}>
+                    {nft.symbol ? "$" + nft.symbol : nft.mint.slice(0, 8) + "…"}
+                  </a>
+                </td>
+                <td>{nft.amountBaseUnits}</td>
+                <td><code>{(nft.currentOwner || nft.recipient).slice(0, 8)}…{(nft.currentOwner || nft.recipient).slice(-6)}</code></td>
+                <td>
+                  <code>
+                    {nft.inscriptionId
+                      ? nft.inscriptionId.slice(0, 12) + "…i0"
+                      : nft.revealTxid
+                        ? nft.revealTxid.slice(0, 12) + "…"
+                        : "pending"}
+                  </code>
+                </td>
               </tr>
             ))}
-            {!claims.length && !error && <tr><td colSpan={5}>No indexed proofs yet.</td></tr>}
+            {!nfts.length && !error && <tr><td colSpan={5}>No ZApp NFT mints yet.</td></tr>}
           </tbody>
         </table>
       </div>
