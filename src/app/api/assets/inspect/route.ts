@@ -12,10 +12,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "mint is required" }, { status: 400 });
     }
     await enforceRateLimit(request, {
-      namespace: "mint-inspect",
+      namespace: "mint-inspect-ip",
       limit: 90,
       windowSeconds: 3600,
-      identity: mint,
     });
     return NextResponse.json({ mint: await inspectMint(mint) });
   } catch (error) {
