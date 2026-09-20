@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listAssets, upsertAsset } from "@/lib/server/db";
+import { listAssetsForDiscovery, upsertAsset, type AssetDiscoverySort } from "@/lib/server/db";
 import {
   sanitizePublicUrl,
   verifyLaunchAuthorization,
@@ -19,7 +19,15 @@ function cleanText(value: unknown, name: string, max: number): string {
 export async function GET(request: NextRequest) {
   try {
     const limit = Number.parseInt(request.nextUrl.searchParams.get("limit") || "50", 10);
-    return NextResponse.json({ assets: await listAssets(Number.isFinite(limit) ? limit : 50) });
+    const requestedSort = request.nextUrl.searchParams.get("sort") || "newest";
+    const allowed = new Set<AssetDiscoverySort>(["newest","trending","most-burned","recently-stamped"]);
+    const sort: AssetDiscoverySort = allowed.has(requestedSort as AssetDiscoverySort)
+      ? requestedSort as AssetDiscoverySort
+      : "newest";
+    return NextResponse.json({
+      assets: await listAssetsForDiscovery(sort, Number.isFinite(limit) ? limit : 50),
+      sort,
+    });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to list assets" }, { status: 500 });
   }
@@ -51,6 +59,8 @@ export async function POST(request: NextRequest) {
       symbol,
       imageUrl: typeof body.imageUrl === "string" ? body.imageUrl : null,
       description,
+      websiteUrl: typeof body.websiteUrl === "string" ? body.websiteUrl : null,
+      xUrl: typeof body.xUrl === "string" ? body.xUrl : null,
     });
     const verified = await verifyLaunchRegistration({ creationSignature, mint, creator });
     const asset = await upsertAsset({
