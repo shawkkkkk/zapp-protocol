@@ -9,7 +9,10 @@
     "start": "next start",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "index:zcash": "node --experimental-strip-types scripts/index-zcash.ts"
+    "index:zcash": "node --experimental-strip-types scripts/index-zcash.ts",
+    "relay:proof": "node --experimental-strip-types scripts/relay-proof.ts",
+    "transfer:proof": "node --experimental-strip-types scripts/transfer-proof.ts",
+    "state:root": "node --experimental-strip-types scripts/state-root.ts"
   },
   "dependencies": {
     "@solana/spl-token": "^0.4.15",
