@@ -7,8 +7,9 @@ infrastructure is healthy and the public launch gate is deliberately opened.
 
 Required:
 
-- PostgreSQL with migrations 001 through 004 applied.
-- Dedicated archive-capable Solana mainnet RPC.
+- PostgreSQL with every `db/*.sql` migration applied.
+- Dedicated transaction-history/archive-capable Solana mainnet RPC.
+- Permanent HTTPS custom domain configured as both `NEXT_PUBLIC_APP_URL` and `ZAPP_CANONICAL_ORIGIN`.
 - Synced Zcash mainnet wallet/node RPC.
 - A wallet-owned compressed transparent signer address in `ZAPP_NFT_SIGNER_TADDR`.
 - Enough transparent ZEC for commit/reveal postage and network fees.
@@ -48,7 +49,10 @@ It must report PASS for:
 - Zcash mainnet node and sync state;
 - wallet-owned inscription signer;
 - minimum relay ZEC balance;
-- fresh NFT-worker heartbeat; and
+- fresh NFT-worker heartbeat;
+- fresh independent Zcash-indexer heartbeat;
+- immutable image/rate-limit/attestation/indexer-verification schema;
+- permanent custom metadata origin; and
 - NFT queue access.
 
 The Solana mainnet full genesis hash is pinned to
@@ -80,8 +84,11 @@ Verify in order:
 8. Explorer shows the same burn amount, mint, destination and inscription id.
 9. Stop/restart the worker and verify no duplicate inscription is produced.
 10. Run the independent indexer/state-root reconstruction.
+11. Run `npm run canary:audit -- <burnId>` and require every line to PASS.
 
-Do not enable public burns if any canary step fails.
+The canary audit requires the worker-confirmed reveal transaction to equal the canonical
+indexed claim and requires `indexer_verified_at` to be present. Do not enable public burns
+if any canary step fails.
 
 ## 5. Open the gate
 
@@ -95,10 +102,12 @@ NEXT_PUBLIC_ZAPP_PUBLIC_LAUNCH_ENABLED=true
 Then run:
 
 ```bash
-npm run preflight
+npm run preflight:public
 ```
 
-`/api/readiness` should now return HTTP 200.
+`/api/readiness` should now return HTTP 200. Before the gate is opened, ordinary
+`npm run preflight` validates infrastructure while intentionally allowing the gate to
+remain closed.
 
 ## 6. First-hour monitoring
 
