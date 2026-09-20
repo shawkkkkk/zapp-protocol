@@ -54,10 +54,9 @@ export async function POST(request: NextRequest) {
     if (!signature) return NextResponse.json({ error: "solanaSignature is required" }, { status: 400 });
 
     await enforceRateLimit(request, {
-      namespace: "claim-submit",
+      namespace: "claim-submit-ip",
       limit: 120,
       windowSeconds: 3600,
-      identity: signature,
     });
 
     const evidence = await verifyBurnRaw(signature);
