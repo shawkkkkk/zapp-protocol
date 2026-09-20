@@ -14,7 +14,14 @@ export class RateLimitError extends Error {
 function clientFingerprint(request: Request): string {
   const forwarded = request.headers.get("x-forwarded-for") || "";
   const realIp = request.headers.get("x-real-ip") || "";
-  const ip = forwarded.split(",")[0]?.trim() || realIp.trim() || "unknown";
+  const chain = forwarded
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  // On reverse-proxy hosting, a client can pre-populate X-Forwarded-For.
+  // Prefer an explicit proxy-provided real IP; otherwise use the final hop
+  // rather than trusting the first user-controlled value.
+  const ip = realIp.trim() || chain.at(-1) || "unknown";
   const secret = process.env.ZAPP_RATE_LIMIT_SECRET || "zapp-rate-limit-v1";
   return createHash("sha256").update(secret + "\0" + ip).digest("hex");
 }
