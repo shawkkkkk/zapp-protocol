@@ -256,6 +256,36 @@ export async function readinessChecks(): Promise<ReadinessCheck[]> {
   }
 
   try {
+    const health = await getServiceHealth("solana-watcher");
+    if (!health) {
+      checks.push({
+        ok: false,
+        name: "solana-watcher",
+        detail: "no automatic burn watcher heartbeat recorded",
+      });
+    } else {
+      const ageMs = Date.now() - new Date(health.heartbeat_at).getTime();
+      const fresh = ageMs >= 0 && ageMs <= 60_000;
+      checks.push({
+        ok: fresh && health.status === "ready",
+        name: "solana-watcher",
+        detail: fresh
+          ? health.status + (health.details ? ": " + health.details : "")
+          : "Solana watcher heartbeat is stale",
+      });
+    }
+  } catch (error) {
+    checks.push({
+      ok: false,
+      name: "solana-watcher",
+      detail:
+        error instanceof Error
+          ? error.message
+          : "Solana watcher health unavailable",
+    });
+  }
+
+  try {
     const health = await getServiceHealth("zcash-indexer");
     if (!health) {
       checks.push({ ok: false, name: "zcash-indexer", detail: "no indexer heartbeat recorded" });
