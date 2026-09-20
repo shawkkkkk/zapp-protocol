@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Connection } from "@solana/web3.js";
 import { buildLaunchMessage } from "@/lib/launch";
-import { bytesToHex } from "@/lib/protocol";
+import { bytesToHex, parseUiAmount } from "@/lib/protocol";
 import {
   browserSolanaRpc,
   buildFixedSupplyMintTransaction,
@@ -53,6 +53,7 @@ export function LaunchCreator() {
   const [xUrl, setXUrl] = useState("");
   const [supply, setSupply] = useState("1000000000");
   const [decimals, setDecimals] = useState("6");
+  const [minimumBurn, setMinimumBurn] = useState("1");
 
   const [existingMint, setExistingMint] = useState("");
   const [creationSignature, setCreationSignature] = useState("");
@@ -77,6 +78,7 @@ export function LaunchCreator() {
     mint: string;
     creationSignature: string;
     creator: string;
+    minBurnBaseUnits: string;
   }) {
     validateMetadata();
     const provider = getInjectedWallet();
@@ -93,6 +95,7 @@ export function LaunchCreator() {
       description: description || null,
       websiteUrl: websiteUrl || null,
       xUrl: xUrl || null,
+      minBurnBaseUnits: input.minBurnBaseUnits,
     });
 
     const authorization = await provider.signMessage(
@@ -113,6 +116,7 @@ export function LaunchCreator() {
         description: description || null,
         websiteUrl: websiteUrl || null,
         xUrl: xUrl || null,
+        minBurnBaseUnits: input.minBurnBaseUnits,
       }),
     });
     const json = await response.json();
@@ -120,7 +124,7 @@ export function LaunchCreator() {
     return json.asset;
   }
 
-  async function inspectExisting() {
+  async function inspectExisting(): Promise<Inspection | null> {
     setMessage("");
     setInspection(null);
     if (!existingMint.trim()) {
@@ -134,12 +138,15 @@ export function LaunchCreator() {
       );
       const json = await response.json();
       if (!response.ok) throw new Error(json.error || "Unable to inspect mint");
-      setInspection(json.mint);
-      if (!json.mint.mintAuthorityRevoked) {
+      const inspected = json.mint as Inspection;
+      setInspection(inspected);
+      if (!inspected.mintAuthorityRevoked) {
         setMessage("This mint still has mint authority. Revoke it before a public ZApp listing.");
       }
+      return inspected;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Mint inspection failed");
+      return null;
     }
   }
 
@@ -157,10 +164,12 @@ export function LaunchCreator() {
       const owner = provider.publicKey || (await provider.connect()).publicKey;
       setWallet(owner.toBase58());
 
+      const launchDecimals = Number.parseInt(decimals, 10);
+      const minBurnBaseUnits = parseUiAmount(minimumBurn, launchDecimals).toString();
       const built = await buildFixedSupplyMintTransaction({
         owner,
         supplyUi: supply,
-        decimals: Number.parseInt(decimals, 10),
+        decimals: launchDecimals,
       });
       const sent = await provider.signAndSendTransaction(built.transaction);
       setMessage("Token transaction sent. Waiting for Solana finality…");
@@ -170,6 +179,7 @@ export function LaunchCreator() {
         mint: built.mint,
         creationSignature: sent.signature,
         creator: owner.toBase58(),
+        minBurnBaseUnits,
       });
 
       window.location.href = "/asset/" + built.mint;
@@ -192,7 +202,12 @@ export function LaunchCreator() {
       if (!existingMint.trim() || !creationSignature.trim()) {
         throw new Error("Mint and mint-creation transaction are required");
       }
-      if (!inspection) await inspectExisting();
+      const inspected = inspection || (await inspectExisting());
+      if (!inspected) throw new Error("Inspect the mint before registering it");
+      if (!inspected.mintAuthorityRevoked) {
+        throw new Error("Mint authority must be revoked before public registration");
+      }
+      const minBurnBaseUnits = parseUiAmount(minimumBurn, inspected.decimals).toString();
 
       const provider = getInjectedWallet();
       if (!provider) throw new Error("No compatible Solana wallet found");
@@ -203,6 +218,7 @@ export function LaunchCreator() {
         mint: existingMint.trim(),
         creationSignature: creationSignature.trim(),
         creator: owner.toBase58(),
+        minBurnBaseUnits,
       });
       window.location.href = "/asset/" + existingMint.trim();
     } catch (error) {
@@ -309,6 +325,20 @@ export function LaunchCreator() {
             onChange={(e) => setXUrl(e.target.value)}
             placeholder="https://x.com/…"
           />
+        </label>
+
+        <label>
+          <span>Minimum burn for one Zcash NFT</span>
+          <input
+            value={minimumBurn}
+            onChange={(e) => setMinimumBurn(e.target.value)}
+            placeholder="1"
+            inputMode="decimal"
+          />
+          <small>
+            Burns below this amount are rejected by the protocol. The value is signed into
+            your launch metadata and enforced server-side.
+          </small>
         </label>
 
         {mode === "new" ? (
