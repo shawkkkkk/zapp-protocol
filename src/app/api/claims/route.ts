@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { encodeClaimPayload, bytesToHex } from "@/lib/protocol";
 import { verifyBurnTransaction } from "@/lib/server/solana";
+import { verifyBurnRaw } from "@/lib/server/solana-raw";
 import {
   acquireClaimRelay,
   getClaim,
@@ -48,7 +49,18 @@ export async function POST(request: NextRequest) {
     const signature = body.solanaSignature?.trim();
     if (!signature) return NextResponse.json({ error: "solanaSignature is required" }, { status: 400 });
 
-    const evidence = await verifyBurnTransaction(signature, undefined, { requireRelayFee: true });
+    const evidence = await verifyBurnRaw(signature);
+    if (BigInt(process.env.ZAPP_FEE_LAMPORTS || "0") > 0n) {
+      const feeEvidence = await verifyBurnTransaction(signature, undefined, { requireRelayFee: true });
+      if (
+        feeEvidence.burnId !== evidence.burnId ||
+        feeEvidence.mint !== evidence.mint ||
+        feeEvidence.amount !== evidence.amount ||
+        feeEvidence.recipient !== evidence.recipient
+      ) {
+        throw new Error("Relay-fee parser disagrees with the canonical raw burn verifier");
+      }
+    }
     burnId = evidence.burnId;
 
     const payloadHex = bytesToHex(
