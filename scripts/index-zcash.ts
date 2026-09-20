@@ -55,7 +55,35 @@ async function reconcileReorg(startHeight: number): Promise<number> {
   try {
     await client.query("BEGIN");
     await client.query(
-      "UPDATE claims SET status='invalidated', zcash_height=NULL, zcash_tx_index=NULL, updated_at=NOW() WHERE zcash_height > $1",
+      `UPDATE nft_mints n
+       SET indexer_verified_at=NULL,
+           indexer_verified_height=NULL,
+           status=CASE
+             WHEN n.reveal_raw_hex IS NOT NULL THEN 'reveal_broadcast'
+             ELSE 'queued'
+           END,
+           error=NULL,
+           updated_at=NOW()
+       WHERE n.burn_id IN (
+         SELECT burn_id FROM claims WHERE zcash_height > $1
+       )`,
+      [height],
+    );
+    await client.query(
+      `UPDATE claims
+       SET status='reserved',
+           zcash_txid=NULL,
+           zcash_height=NULL,
+           zcash_tx_index=NULL,
+           recipient_vout=NULL,
+           carrier_vout=NULL,
+           current_owner=NULL,
+           owner_txid=NULL,
+           owner_vout=NULL,
+           ownership_state='tracked',
+           error=NULL,
+           updated_at=NOW()
+       WHERE zcash_height > $1`,
       [height],
     );
     await client.query("DELETE FROM transfers WHERE zcash_height > $1", [height]);
