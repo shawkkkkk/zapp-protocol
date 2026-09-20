@@ -351,11 +351,20 @@ async function processOne(): Promise<boolean> {
 async function main() {
   await selfTestSigner();
   await heartbeatService("nft-worker", "ready", "signer self-test passed");
+  console.log("ZApp NFT worker ready: signer self-test passed, queue polling active");
+  let lastLogAt = Date.now();
   const watch = process.argv.includes("--watch");
   do {
     try {
       const worked = await processOne();
       await heartbeatService("nft-worker", "ready", worked ? "processed queue item" : "idle");
+      if (worked) {
+        console.log("ZApp NFT worker processed a queue item");
+        lastLogAt = Date.now();
+      } else if (Date.now() - lastLogAt >= 30_000) {
+        console.log("ZApp NFT worker heartbeat: ready, queue idle");
+        lastLogAt = Date.now();
+      }
       if (!watch) break;
       if (!worked) await new Promise((resolve) => setTimeout(resolve, 3000));
     } catch (error) {
