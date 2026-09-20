@@ -70,8 +70,20 @@ because `ZAPP_PUBLIC_LAUNCH_ENABLED` is still false.
 
 ## 4. Mainnet canary
 
-Before public announcement, use a dedicated canary SPL asset and the smallest practical
-burn amount.
+Keep both public launch gates false. Temporarily set:
+
+```
+ZAPP_CANARY_ENABLED=true
+ZAPP_CANARY_SECRET=<long random secret>
+ZAPP_SOLANA_WATCHER_ENABLED=true
+ZAPP_INDEXER_ENABLED=true
+```
+
+Open the unlisted `/canary` page, unlock it with the canary secret, and use the same
+production wallet/launch/burn UI that public users will use. The secret is exchanged for
+an HttpOnly two-hour session; it is not a client-side feature flag.
+
+Before public announcement, use the smallest practical canary supply and burn amount.
 
 Verify in order:
 
@@ -94,7 +106,13 @@ if any canary step fails.
 
 ## 5. Open the gate
 
-Set both values to true and rebuild/restart the web process:
+First disable private canary access:
+
+```
+ZAPP_CANARY_ENABLED=false
+```
+
+Then set both public values to true and rebuild/restart the web process:
 
 ```
 ZAPP_PUBLIC_LAUNCH_ENABLED=true
