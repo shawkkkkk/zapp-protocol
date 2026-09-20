@@ -9,6 +9,7 @@ import {
   internalImagePath,
 } from "@/lib/image-upload";
 import { putLaunchImage } from "@/lib/server/db";
+import { enforceRateLimit, RateLimitError, rateLimitResponse } from "@/lib/server/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,6 +23,13 @@ export async function POST(request: NextRequest) {
 
     if (!(file instanceof File)) throw new Error("Image file is required");
     if (!creator) throw new Error("Creator wallet is required");
+
+    await enforceRateLimit(request, {
+      namespace: "image-upload",
+      limit: 30,
+      windowSeconds: 3600,
+      identity: creator,
+    });
     if (!TOKEN_IMAGE_TYPES.has(file.type)) {
       throw new Error("Use PNG, JPG, GIF, or WebP");
     }
@@ -60,6 +68,7 @@ export async function POST(request: NextRequest) {
       contentType: file.type,
     });
   } catch (error) {
+    if (error instanceof RateLimitError) return rateLimitResponse(error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Image upload failed" },
       { status: 400 },
