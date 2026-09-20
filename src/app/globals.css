@@ -1470,3 +1470,11 @@ a.leaderboard-row:hover {
     min-width: 820px;
   }
 }
+
+.leaderboard-sub {
+  display: block;
+  margin-top: 3px;
+  color: #7e755d;
+  font-size: 8px;
+  font-weight: 400;
+}
