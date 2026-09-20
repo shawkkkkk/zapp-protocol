@@ -27,6 +27,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    if (process.env.ZAPP_PUBLIC_LAUNCH_ENABLED !== "true") {
+      return NextResponse.json({ error: "ZApp public launch is not enabled yet" }, { status: 503 });
+    }
     const body = await request.json() as Record<string, unknown>;
     const mint = cleanText(body.mint, "mint", 64);
     const creator = cleanText(body.creator, "creator", 64);
