@@ -46,6 +46,8 @@ export async function GET(
         revealTxid: nft.reveal_txid,
         inscriptionId: nft.inscription_id,
         contentSha256: nft.content_sha256,
+        indexerVerifiedAt: nft.indexer_verified_at,
+        indexerVerifiedHeight: nft.indexer_verified_height,
         error: nft.status === "failed" ? nft.error : null,
       } : null,
     });
