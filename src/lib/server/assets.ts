@@ -1,3 +1,6 @@
+import nacl from "tweetnacl";
+import { base58Decode, hexToBytes } from "../protocol.ts";
+import { buildLaunchMessage, type LaunchMessageInput } from "../launch.ts";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID, getMint } from "@solana/spl-token";
 import { fetchFinalizedRawTransaction } from "./solana-raw.ts";
@@ -60,4 +63,16 @@ export function sanitizePublicUrl(value: unknown): string | null {
   const url = new URL(value.trim());
   if (!["https:", "http:"].includes(url.protocol)) throw new Error("Only http(s) URLs are allowed");
   return url.toString();
+}
+
+export function verifyLaunchAuthorization(
+  input: LaunchMessageInput & { creator: string; registrationSignature: string },
+): void {
+  const publicKey = base58Decode(input.creator);
+  if (publicKey.length !== 32) throw new Error("Creator is not a Solana public key");
+  const signature = hexToBytes(input.registrationSignature, 64);
+  const message = new TextEncoder().encode(buildLaunchMessage(input));
+  if (!nacl.sign.detached.verify(message, signature, publicKey)) {
+    throw new Error("Launch metadata was not signed by the creator wallet");
+  }
 }
