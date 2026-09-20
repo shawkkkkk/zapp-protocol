@@ -304,3 +304,168 @@ export async function rebuildOwnershipFromTransfers(): Promise<void> {
     );
   }
 }
+
+export type AssetRow = {
+  mint: string;
+  token_program: string;
+  name: string;
+  symbol: string;
+  decimals: number;
+  creator: string;
+  image_url: string | null;
+  description: string | null;
+  website_url: string | null;
+  x_url: string | null;
+  launch_slot: string;
+  enabled: boolean;
+  created_at: string;
+};
+
+export async function upsertAsset(input: {
+  mint: string;
+  tokenProgram: string;
+  name: string;
+  symbol: string;
+  decimals: number;
+  creator: string;
+  imageUrl?: string | null;
+  description?: string | null;
+  websiteUrl?: string | null;
+  xUrl?: string | null;
+  launchSlot: number;
+}): Promise<AssetRow> {
+  const result = await database().query<AssetRow>(
+    `INSERT INTO assets (
+      mint,token_program,name,symbol,decimals,creator,image_url,description,website_url,x_url,launch_slot
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+    ON CONFLICT (mint) DO UPDATE SET
+      name=EXCLUDED.name,
+      symbol=EXCLUDED.symbol,
+      image_url=EXCLUDED.image_url,
+      description=EXCLUDED.description,
+      website_url=EXCLUDED.website_url,
+      x_url=EXCLUDED.x_url
+    WHERE assets.creator=EXCLUDED.creator
+    RETURNING *`,
+    [
+      input.mint,input.tokenProgram,input.name,input.symbol,input.decimals,input.creator,
+      input.imageUrl || null,input.description || null,input.websiteUrl || null,input.xUrl || null,
+      input.launchSlot,
+    ],
+  );
+  if (!result.rows[0]) throw new Error("This mint is already registered by a different creator");
+  return result.rows[0];
+}
+
+export async function getAsset(mint: string): Promise<AssetRow | null> {
+  const result = await database().query<AssetRow>("SELECT * FROM assets WHERE mint=$1 AND enabled=TRUE", [mint]);
+  return result.rows[0] || null;
+}
+
+export async function listAssets(limit = 50): Promise<AssetRow[]> {
+  const safeLimit = Math.max(1, Math.min(limit, 200));
+  const result = await database().query<AssetRow>(
+    "SELECT * FROM assets WHERE enabled=TRUE ORDER BY created_at DESC LIMIT $1",
+    [safeLimit],
+  );
+  return result.rows;
+}
+
+export type NftMintRow = {
+  burn_id: string;
+  status: "queued" | "building" | "commit_broadcast" | "reveal_broadcast" | "confirmed" | "failed";
+  content_json: string;
+  content_sha256: string;
+  commit_txid: string | null;
+  commit_vout: number | null;
+  reveal_txid: string | null;
+  inscription_id: string | null;
+  attempts: number;
+  error: string | null;
+  updated_at: string;
+  created_at: string;
+};
+
+export async function queueNftMint(input: {
+  burnId: string;
+  contentJson: string;
+  contentSha256: string;
+}): Promise<NftMintRow> {
+  const result = await database().query<NftMintRow>(
+    `INSERT INTO nft_mints (burn_id,status,content_json,content_sha256)
+     VALUES ($1,'queued',$2,$3)
+     ON CONFLICT (burn_id) DO UPDATE SET
+       status=CASE WHEN nft_mints.status='failed' THEN 'queued' ELSE nft_mints.status END,
+       error=CASE WHEN nft_mints.status='failed' THEN NULL ELSE nft_mints.error END,
+       updated_at=NOW()
+     RETURNING *`,
+    [input.burnId,input.contentJson,input.contentSha256],
+  );
+  return result.rows[0];
+}
+
+export async function getNftMint(burnId: string): Promise<NftMintRow | null> {
+  const result = await database().query<NftMintRow>("SELECT * FROM nft_mints WHERE burn_id=$1", [burnId]);
+  return result.rows[0] || null;
+}
+
+export async function acquireNextNftMint(): Promise<NftMintRow | null> {
+  const client = await database().connect();
+  try {
+    await client.query("BEGIN");
+    const selected = await client.query<NftMintRow>(
+      `SELECT * FROM nft_mints
+       WHERE status='queued'
+          OR (status='building' AND updated_at < NOW() - INTERVAL '10 minutes')
+       ORDER BY created_at ASC
+       FOR UPDATE SKIP LOCKED
+       LIMIT 1`,
+    );
+    const row = selected.rows[0];
+    if (!row) {
+      await client.query("COMMIT");
+      return null;
+    }
+    const claimed = await client.query<NftMintRow>(
+      `UPDATE nft_mints
+       SET status='building', attempts=attempts+1, error=NULL, updated_at=NOW()
+       WHERE burn_id=$1 RETURNING *`,
+      [row.burn_id],
+    );
+    await client.query("COMMIT");
+    return claimed.rows[0];
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function updateNftMint(
+  burnId: string,
+  patch: {
+    status: NftMintRow["status"];
+    commitTxid?: string | null;
+    commitVout?: number | null;
+    revealTxid?: string | null;
+    inscriptionId?: string | null;
+    error?: string | null;
+  },
+): Promise<void> {
+  await database().query(
+    `UPDATE nft_mints SET
+      status=$2,
+      commit_txid=COALESCE($3,commit_txid),
+      commit_vout=COALESCE($4,commit_vout),
+      reveal_txid=COALESCE($5,reveal_txid),
+      inscription_id=COALESCE($6,inscription_id),
+      error=$7,
+      updated_at=NOW()
+     WHERE burn_id=$1`,
+    [
+      burnId,patch.status,patch.commitTxid ?? null,patch.commitVout ?? null,
+      patch.revealTxid ?? null,patch.inscriptionId ?? null,patch.error ?? null,
+    ],
+  );
+}
