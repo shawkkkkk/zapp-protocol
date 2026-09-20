@@ -1,5 +1,5 @@
-import { AssetGrid } from "@/components/AssetGrid";
-import { Launchpad } from "@/components/Launchpad";
+import { AssetDiscovery } from "@/components/AssetDiscovery";
+import { LaunchCreator } from "@/components/LaunchCreator";
 
 export default function Home() {
   return (
@@ -7,7 +7,8 @@ export default function Home() {
       <nav className="nav shell">
         <a className="brand" href="/">ZApp</a>
         <div className="navlinks">
-          <a href="#launches">Launches</a>
+          <a href="#launch">Launch</a>
+          <a href="#launches">Discover</a>
           <a href="#how">How it works</a>
           <a href="/explorer">Explorer</a>
           <a href="https://github.com/shawkkkkk/zapp-protocol" target="_blank" rel="noreferrer">GitHub</a>
@@ -16,43 +17,47 @@ export default function Home() {
 
       <section className="hero shell">
         <div className="eyebrow">ZCASH ASSET LAUNCHPAD</div>
-        <h1>Launch before<br /><span>ZSAs exist.</span></h1>
+        <h1>Launch on Solana.<br /><span>Land on Zcash.</span></h1>
         <p className="lede">
-          Create an SPL asset, let holders burn it on Solana, and deliver a collectible
-          inscription/NFT to their chosen Zcash mainnet address.
+          Create or register an SPL asset. Holders burn it on Solana and receive
+          the corresponding collectible inscription/NFT on Zcash mainnet.
         </p>
         <div className="truthbar">
           <span>Real token burn</span>
           <span>Real Zcash NFT</span>
           <span>Publicly verifiable</span>
+          <span>No custody of holder tokens</span>
         </div>
         <p className="hero-disclosure">
-          ZApp NFTs are live-protocol claim objects, not native ZSAs. Native shielded asset
-          migration depends on whatever Zcash actually activates later.
+          ZApp NFTs are public claim objects, not native ZSAs. Native shielded-asset
+          migration depends on what Zcash actually activates later.
         </p>
       </section>
 
-      <Launchpad />
+      <LaunchCreator />
 
       <section id="launches" className="section shell">
-        <div className="sectionhead">
-          <div className="eyebrow">LIVE LAUNCHES</div>
-          <h2>Assets migrating into Zcash</h2>
-          <p>Each launch is tied to a finalized SPL mint transaction with revoked mint authority.</p>
+        <div className="sectionhead discovery-head">
+          <div>
+            <div className="eyebrow">THE REGISTER</div>
+            <h2>Live ZApp launches</h2>
+            <p>Browse verified launches by activity, burns, and confirmed Zcash NFTs.</p>
+          </div>
+          <a className="textlink" href="/explorer">Open proof explorer →</a>
         </div>
-        <AssetGrid />
+        <AssetDiscovery />
       </section>
 
       <section id="how" className="section shell">
         <div className="sectionhead">
           <div className="eyebrow">HOW ZAPP WORKS</div>
-          <h2>The workaround is the product.</h2>
+          <h2>Three actions. Two chains. One public trail.</h2>
         </div>
         <div className="grid3">
           <article className="card">
             <div className="step">01</div>
             <h3>Launch</h3>
-            <p>Create a fixed-supply SPL token through ZApp or enter a verified public ZApp launch.</p>
+            <p>Create a fixed-supply SPL token or register an existing mint whose authority is already revoked.</p>
           </article>
           <article className="card">
             <div className="step">02</div>
@@ -61,8 +66,8 @@ export default function Home() {
           </article>
           <article className="card">
             <div className="step">03</div>
-            <h3>Claim</h3>
-            <p>ZApp verifies the burn and mints the corresponding collectible inscription/NFT to that Zcash address.</p>
+            <h3>Receive</h3>
+            <p>ZApp independently verifies the burn and delivers the corresponding collectible inscription/NFT on Zcash.</p>
           </article>
         </div>
       </section>
@@ -70,12 +75,12 @@ export default function Home() {
       <section className="section shell statement">
         <div>
           <div className="eyebrow">HONEST BY DESIGN</div>
-          <h2>Real NFT now. Native asset later.</h2>
+          <h2>NFT now. Native asset later.</h2>
         </div>
         <p>
-          ZApp NFTs are public Zcash inscriptions representing verified destruction of SPL tokens.
-          They are not native shielded assets today. If compatible ZSAs activate later, canonical NFT
-          ownership and burn amounts are the intended migration basis under a separately versioned policy.
+          Today, the Zcash object is a public inscription/NFT tied to a verified SPL burn.
+          It is not a native shielded asset. If compatible ZSAs activate later, ZApp can
+          migrate from the canonical burn and ownership ledger under a separate auditable policy.
         </p>
       </section>
 
