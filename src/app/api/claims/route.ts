@@ -69,6 +69,11 @@ export async function POST(request: NextRequest) {
     if (process.env.ZAPP_REQUIRE_REGISTERED_ASSET !== "false") {
       const asset = await getAsset(evidence.mint);
       if (!asset) throw new Error("This mint is not a public ZApp launch");
+      if (evidence.amount < BigInt(asset.min_burn_base_units)) {
+        throw new Error(
+          "Burn is below this launch's minimum of " + asset.min_burn_base_units + " base units"
+        );
+      }
     }
 
     const payloadHex = bytesToHex(
