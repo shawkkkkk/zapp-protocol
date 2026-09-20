@@ -7,6 +7,11 @@ import { ZAppWalletButton } from "@/components/ZAppWalletButton";
 import { buildLaunchMessage } from "@/lib/launch";
 import { bytesToHex, parseUiAmount } from "@/lib/protocol";
 import {
+  MAX_TOKEN_IMAGE_BYTES,
+  TOKEN_IMAGE_TYPES,
+  buildImageUploadMessage,
+} from "@/lib/image-upload";
+import {
   browserSolanaRpc,
   buildFixedSupplyMintTransaction,
 } from "@/lib/client/solana";
@@ -50,6 +55,8 @@ export function LaunchCreator() {
   const [symbol, setSymbol] = useState("");
   const [description, setDescription] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [xUrl, setXUrl] = useState("");
   const [supply, setSupply] = useState("1000000000");
@@ -59,6 +66,39 @@ export function LaunchCreator() {
   const [existingMint, setExistingMint] = useState("");
   const [creationSignature, setCreationSignature] = useState("");
   const [inspection, setInspection] = useState<Inspection | null>(null);
+
+  async function uploadImage(file: File): Promise<string> {
+    if (!publicKey) throw new Error("Connect a Solana wallet first");
+    if (!signMessage) throw new Error("The selected wallet does not support message signing");
+    if (!TOKEN_IMAGE_TYPES.has(file.type)) throw new Error("Use PNG, JPG, GIF, or WebP");
+    if (file.size <= 0 || file.size > MAX_TOKEN_IMAGE_BYTES) {
+      throw new Error("Image must be 2 MB or smaller");
+    }
+
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+    const sha256 = bytesToHex(digest);
+    const message = buildImageUploadMessage({
+      sha256,
+      byteSize: bytes.byteLength,
+      contentType: file.type,
+    });
+    const signature = await signMessage(new TextEncoder().encode(message));
+
+    const form = new FormData();
+    form.set("file", file);
+    form.set("creator", publicKey.toBase58());
+    form.set("signature", bytesToHex(signature));
+
+    const response = await fetch("/api/uploads/token-image", {
+      method: "POST",
+      body: form,
+    });
+    const json = await response.json();
+    if (!response.ok) throw new Error(json.error || "Image upload failed");
+    setImageUrl(json.imageUrl);
+    return json.imageUrl as string;
+  }
 
   function validateMetadata() {
     if (!name.trim()) throw new Error("Name is required");
@@ -79,12 +119,14 @@ export function LaunchCreator() {
       throw new Error("The selected wallet does not support message signing");
     }
 
+    const hostedImageUrl = imageFile ? await uploadImage(imageFile) : (imageUrl || null);
+
     const launchMessage = buildLaunchMessage({
       mint: input.mint,
       creationSignature: input.creationSignature,
       name,
       symbol,
-      imageUrl: imageUrl || null,
+      imageUrl: hostedImageUrl,
       description: description || null,
       websiteUrl: websiteUrl || null,
       xUrl: xUrl || null,
@@ -105,7 +147,7 @@ export function LaunchCreator() {
         registrationSignature: bytesToHex(authorization),
         name,
         symbol,
-        imageUrl: imageUrl || null,
+        imageUrl: hostedImageUrl,
         description: description || null,
         websiteUrl: websiteUrl || null,
         xUrl: xUrl || null,
@@ -201,6 +243,9 @@ export function LaunchCreator() {
       if (!inspected.mintAuthorityRevoked) {
         throw new Error("Mint authority must be revoked before public registration");
       }
+      if (!inspected.freezeAuthorityRevoked) {
+        throw new Error("Freeze authority must be revoked before public registration");
+      }
       const minBurnBaseUnits = parseUiAmount(minimumBurn, inspected.decimals).toString();
 
       if (!publicKey) throw new Error("Connect a Solana wallet first");
@@ -288,12 +333,36 @@ export function LaunchCreator() {
 
         <div className="form-grid">
           <label>
-            <span>Image URL</span>
-            <input
-              value={imageUrl}
-              onChange={(e) => setImageUrl(e.target.value)}
-              placeholder="https://…"
-            />
+            <span>Token image</span>
+            <div className="image-upload-field">
+              <label className="image-upload-button">
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/gif,image/webp"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] || null;
+                    if (!file) return;
+                    if (!TOKEN_IMAGE_TYPES.has(file.type)) {
+                      setMessage("Use PNG, JPG, GIF, or WebP.");
+                      return;
+                    }
+                    if (file.size > MAX_TOKEN_IMAGE_BYTES) {
+                      setMessage("Image must be 2 MB or smaller.");
+                      return;
+                    }
+                    if (imagePreview.startsWith("blob:")) URL.revokeObjectURL(imagePreview);
+                    setImageFile(file);
+                    setImageUrl("");
+                    setImagePreview(URL.createObjectURL(file));
+                    setMessage("");
+                  }}
+                />
+                <span>{imageFile ? "Change image" : "Choose image"}</span>
+              </label>
+              <div className="image-upload-meta">
+                {imageFile ? imageFile.name : "PNG, JPG, GIF or WebP · max 2 MB"}
+              </div>
+            </div>
           </label>
           <label>
             <span>Website</span>
@@ -384,6 +453,9 @@ export function LaunchCreator() {
                 <span className={inspection.mintAuthorityRevoked ? "ok" : "bad"}>
                   {inspection.mintAuthorityRevoked ? "✓ Mint authority revoked" : "✕ Mint authority active"}
                 </span>
+                <span className={inspection.freezeAuthorityRevoked ? "ok" : "bad"}>
+                  {inspection.freezeAuthorityRevoked ? "✓ Freeze authority revoked" : "✕ Freeze authority active"}
+                </span>
                 <span>{inspection.decimals} decimals</span>
                 <span>{inspection.supplyBaseUnits} raw supply</span>
               </div>
@@ -418,7 +490,11 @@ export function LaunchCreator() {
       <aside className="creator-side">
         <div className="token-preview">
           <div className="preview-image">
-            {imageUrl ? <img src={imageUrl} alt="" /> : <span>{ticker.slice(0, 2)}</span>}
+            {imagePreview || imageUrl ? (
+              <img src={imagePreview || imageUrl} alt="" />
+            ) : (
+              <span>{ticker.slice(0, 2)}</span>
+            )}
           </div>
           <div>
             <span className="preview-label">LIVE PREVIEW</span>
