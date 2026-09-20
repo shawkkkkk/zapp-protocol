@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
     const signature = body.solanaSignature?.trim();
     if (!signature) return NextResponse.json({ error: "solanaSignature is required" }, { status: 400 });
 
-    const evidence = await verifyBurnTransaction(signature);
+    const evidence = await verifyBurnTransaction(signature, undefined, { requireRelayFee: true });
     burnId = evidence.burnId;
 
     const payloadHex = bytesToHex(
