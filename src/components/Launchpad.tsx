@@ -336,6 +336,11 @@ export function Launchpad({
                 <code>{result.nft}</code>
               </div>
             )}
+            {result.burnId && (
+              <a className="proof-link" href={"/proof/" + result.burnId}>
+                View Proof of Destruction →
+              </a>
+            )}
           </div>
         )}
       </div>
