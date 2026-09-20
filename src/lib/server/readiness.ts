@@ -61,6 +61,7 @@ export async function readinessChecks(): Promise<ReadinessCheck[]> {
       indexer_verified_column: string | null;
       watch_cursors: string | null;
       registered_supply_column: string | null;
+      service_health_metadata_column: string | null;
     }>(
       `SELECT
          to_regclass('public.claims')::text AS claims,
@@ -108,7 +109,15 @@ export async function readinessChecks(): Promise<ReadinessCheck[]> {
              AND table_name='assets'
              AND column_name='registered_supply_base_units'
            LIMIT 1
-         ) AS registered_supply_column`,
+         ) AS registered_supply_column,
+         (
+           SELECT column_name
+           FROM information_schema.columns
+           WHERE table_schema='public'
+             AND table_name='service_health'
+             AND column_name='metadata'
+           LIMIT 1
+         ) AS service_health_metadata_column`,
     );
     const row = schema.rows[0];
     const ok = Boolean(
@@ -122,7 +131,8 @@ export async function readinessChecks(): Promise<ReadinessCheck[]> {
       row?.registration_sig_column &&
       row?.indexer_verified_column &&
       row?.watch_cursors &&
-      row?.registered_supply_column
+      row?.registered_supply_column &&
+      row?.service_health_metadata_column
     );
     checks.push({
       ok,
