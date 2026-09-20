@@ -1478,3 +1478,80 @@ a.leaderboard-row:hover {
   font-size: 8px;
   font-weight: 400;
 }
+
+
+.burn-review {
+  margin: 8px 0 18px;
+  border: 1px solid #73561a;
+  background: #100d07;
+  padding: 16px;
+}
+.burn-review-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 13px;
+  border-bottom: 1px solid var(--line);
+}
+.burn-review-head b {
+  color: #fff2c2;
+  font-size: 13px;
+}
+.burn-review-head span {
+  color: #ff8f78;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.burn-review-grid {
+  display: grid;
+  grid-template-columns: .55fr 1fr 1fr;
+  border-left: 1px solid var(--line);
+  margin-top: 14px;
+}
+.burn-review-grid > div {
+  min-width: 0;
+  padding: 12px;
+  border-top: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.burn-review-grid span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+.burn-review-grid strong,
+.burn-review-grid code {
+  display: block;
+  color: #eee3c4;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.burn-review p {
+  margin: 13px 0;
+  color: #a79d80;
+  font-size: 11px;
+  line-height: 1.55;
+}
+.burn-review-actions {
+  display: grid;
+  grid-template-columns: .7fr 1.3fr;
+  gap: 8px;
+}
+.danger-confirm {
+  background: linear-gradient(180deg, #ffd45b, #e9a91b);
+}
+@media (max-width: 650px) {
+  .burn-review-grid {
+    grid-template-columns: 1fr;
+  }
+  .burn-review-actions {
+    grid-template-columns: 1fr;
+  }
+}
