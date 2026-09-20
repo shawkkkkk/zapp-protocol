@@ -21,6 +21,26 @@ function publicHealth(
   };
 }
 
+function permanentOriginConfigured(): boolean {
+  try {
+    const raw =
+      process.env.ZAPP_CANONICAL_ORIGIN ||
+      process.env.NEXT_PUBLIC_APP_URL ||
+      "";
+    const url = new URL(raw);
+    return (
+      url.protocol === "https:" &&
+      url.pathname === "/" &&
+      !url.search &&
+      !url.hash &&
+      !url.hostname.endsWith(".up.railway.app") &&
+      url.hostname !== "localhost"
+    );
+  } catch {
+    return false;
+  }
+}
+
 export async function GET() {
   let queue = null;
   let worker = null;
@@ -65,10 +85,7 @@ export async function GET() {
             "api.mainnet-beta.solana.com",
           ),
       ),
-      canonicalOriginConfigured: Boolean(
-        process.env.ZAPP_CANONICAL_ORIGIN ||
-          process.env.NEXT_PUBLIC_APP_URL,
-      ),
+      canonicalOriginConfigured: permanentOriginConfigured(),
       databaseConfigured: Boolean(process.env.DATABASE_URL),
       services: {
         nftWorker: publicHealth(worker, 45_000),
