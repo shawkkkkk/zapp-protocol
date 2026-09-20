@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { mutationAllowed } from "@/lib/server/mutation-access";
 import {
   ensureAssetWatchCursor,
   listAssetsForDiscovery,
@@ -42,8 +43,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    if (process.env.ZAPP_PUBLIC_LAUNCH_ENABLED !== "true") {
-      return NextResponse.json({ error: "ZApp public launch is not enabled yet" }, { status: 503 });
+    if (!mutationAllowed(request)) {
+      return NextResponse.json(
+        { error: "ZApp public launch is not enabled yet" },
+        { status: 503 },
+      );
     }
     const body = await request.json() as Record<string, unknown>;
     const mint = cleanText(body.mint, "mint", 64);
