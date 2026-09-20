@@ -661,3 +661,35 @@ export async function getNftQueueStats(): Promise<{
     failed: Number(row?.failed || "0"),
   };
 }
+
+
+export type ServiceHealthRow = {
+  service: string;
+  status: string;
+  details: string | null;
+  heartbeat_at: string;
+};
+
+export async function heartbeatService(
+  service: string,
+  status: string,
+  details?: string | null,
+): Promise<void> {
+  await database().query(
+    `INSERT INTO service_health(service,status,details,heartbeat_at)
+     VALUES ($1,$2,$3,NOW())
+     ON CONFLICT(service) DO UPDATE SET
+       status=EXCLUDED.status,
+       details=EXCLUDED.details,
+       heartbeat_at=NOW()`,
+    [service, status, details || null],
+  );
+}
+
+export async function getServiceHealth(service: string): Promise<ServiceHealthRow | null> {
+  const result = await database().query<ServiceHealthRow>(
+    "SELECT * FROM service_health WHERE service=$1",
+    [service],
+  );
+  return result.rows[0] || null;
+}
