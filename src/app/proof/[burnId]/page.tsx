@@ -73,6 +73,19 @@ export default async function ProofPage({
   );
   const owner = claim.current_owner || claim.recipient;
   const symbol = asset?.symbol ? "$" + asset.symbol : "SPL TOKEN";
+  const origin =
+    process.env.ZAPP_CANONICAL_ORIGIN ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    "https://zapp-web-production.up.railway.app";
+  const proofUrl = origin.replace(/\/$/, "") + "/proof/" + claim.burn_id;
+  const shareText = verified
+    ? amount + " " + symbol + " destroyed on Solana and independently verified on Zcash via ZApp ◈"
+    : amount + " " + symbol + " destroyed on Solana. Zcash verification pending via ZApp ◈";
+  const xShareUrl =
+    "https://x.com/intent/post?text=" +
+    encodeURIComponent(shareText) +
+    "&url=" +
+    encodeURIComponent(proofUrl);
 
   return (
     <main>
@@ -204,6 +217,12 @@ export default async function ProofPage({
               <b>{nft.indexer_verified_height}</b>
             </div>
           )}
+          <div className="proof-actions">
+            <a href={xShareUrl} target="_blank" rel="noreferrer">
+              Share proof on X ↗
+            </a>
+            <a href={proofUrl}>Permanent proof link ↗</a>
+          </div>
           <p>
             ZApp proofs are public inscription/NFT claim objects. They are not
             native shielded Zcash assets.
