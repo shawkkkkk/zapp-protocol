@@ -11,6 +11,36 @@ function connection(): Connection {
   });
 }
 
+
+export async function inspectMint(mint: string): Promise<{
+  mint: string;
+  tokenProgram: string;
+  decimals: number;
+  supplyBaseUnits: string;
+  mintAuthorityRevoked: boolean;
+  freezeAuthorityRevoked: boolean;
+}> {
+  const rpc = connection();
+  const mintKey = new PublicKey(mint);
+  const info = await rpc.getAccountInfo(mintKey, "confirmed");
+  if (!info) throw new Error("Mint account does not exist");
+
+  let tokenProgram: PublicKey;
+  if (info.owner.equals(TOKEN_PROGRAM_ID)) tokenProgram = TOKEN_PROGRAM_ID;
+  else if (info.owner.equals(TOKEN_2022_PROGRAM_ID)) tokenProgram = TOKEN_2022_PROGRAM_ID;
+  else throw new Error("Asset is not an SPL Token or Token-2022 mint");
+
+  const mintInfo = await getMint(rpc, mintKey, "confirmed", tokenProgram);
+  return {
+    mint: mintKey.toBase58(),
+    tokenProgram: tokenProgram.toBase58(),
+    decimals: mintInfo.decimals,
+    supplyBaseUnits: mintInfo.supply.toString(),
+    mintAuthorityRevoked: mintInfo.mintAuthority === null,
+    freezeAuthorityRevoked: mintInfo.freezeAuthority === null,
+  };
+}
+
 export async function verifyLaunchRegistration(input: {
   creationSignature: string;
   mint: string;
