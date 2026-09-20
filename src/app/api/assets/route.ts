@@ -65,8 +65,8 @@ export async function POST(request: NextRequest) {
     });
     const creationSignature = cleanText(body.creationSignature, "creationSignature", 128);
     const registrationSignature = cleanText(body.registrationSignature, "registrationSignature", 128);
-    const name = cleanText(body.name, "name", 48);
-    const symbol = cleanText(body.symbol, "symbol", 12).toUpperCase();
+    const name = cleanText(body.name, "name", 32);
+    const symbol = cleanText(body.symbol, "symbol", 10).toUpperCase();
     const description =
       typeof body.description === "string" && body.description.trim()
         ? body.description.trim().slice(0, 500)
