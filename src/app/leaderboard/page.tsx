@@ -47,7 +47,7 @@ export default async function Leaderboard() {
             <span>#</span>
             <span>Asset</span>
             <span>Burns</span>
-            <span>Destroyed</span>
+            <span>Supply burned</span>
             <span>Zcash NFTs</span>
             <span>Trending</span>
           </div>
@@ -73,7 +73,14 @@ export default async function Leaderboard() {
                 </div>
               </div>
               <span>{asset.verified_burns}</span>
-              <span>{compact(asset.burned_base_units)}</span>
+              <span>
+                {Number(asset.burned_percent).toLocaleString("en-US", {
+                  maximumFractionDigits: 2,
+                })}%
+                <small className="leaderboard-sub">
+                  {compact(asset.burned_base_units)} raw units
+                </small>
+              </span>
               <span>{asset.confirmed_nfts}</span>
               <span>
                 {trendingRank.get(asset.mint)
