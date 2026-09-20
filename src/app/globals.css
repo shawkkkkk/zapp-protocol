@@ -1816,3 +1816,35 @@ a.leaderboard-row:hover {
     grid-template-columns: 34px 1fr;
   }
 }
+
+
+.market-launch {
+  display: grid;
+  gap: 12px;
+  padding: 18px 0 4px;
+}
+.market-launch h3 {
+  margin: 2px 0 0;
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -.035em;
+}
+.market-launch p {
+  margin: 0 0 4px;
+  max-width: 680px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.market-launch small {
+  color: #8d846b;
+  line-height: 1.5;
+}
+.market-launch-link {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  text-decoration: none;
+}
