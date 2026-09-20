@@ -30,6 +30,7 @@ export type WalletProvider = {
   publicKey?: PublicKey;
   connect(): Promise<{ publicKey: PublicKey }>;
   signAndSendTransaction(transaction: Transaction): Promise<{ signature: string }>;
+  signMessage?(message: Uint8Array): Promise<{ signature: Uint8Array }>;
 };
 
 export function browserSolanaRpc(): string {
