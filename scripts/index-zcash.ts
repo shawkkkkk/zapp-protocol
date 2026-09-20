@@ -6,8 +6,14 @@ import {
   rebuildOwnershipFromTransfers,
   terminateIndexedOwnership,
   heartbeatService,
+  markNftIndexerVerified,
 } from "../src/lib/server/db.ts";
 import { decodeClaimPayload, hexToBytes } from "../src/lib/protocol.ts";
+import {
+  parseInscriptionRevealScriptSig,
+  p2shAddressForRedeemScript,
+} from "../src/lib/inscription.ts";
+import { parseNftContent, ZAPP_NFT_CONTENT_TYPE } from "../src/lib/nft.ts";
 import { findBurnRawByCommitment } from "../src/lib/server/solana-raw.ts";
 import { validateProofAgainstBurn } from "../src/lib/validation.ts";
 import {
@@ -16,6 +22,7 @@ import {
   getZcashBlock,
   getZcashBlockCount,
   getZcashBlockHash,
+  getZcashTransaction,
 } from "../src/lib/server/zcash.ts";
 
 const STATE = "zcash-mainnet-v1";
@@ -147,6 +154,46 @@ async function indexTransfers(
   }
 }
 
+
+async function verifyNftReveal(
+  tx: Awaited<ReturnType<typeof getZcashBlock>>["tx"][number],
+  burn: NonNullable<Awaited<ReturnType<typeof findBurnRawByCommitment>>>,
+): Promise<boolean> {
+  if ((tx.vin || []).length !== 1) return false;
+  const vin = tx.vin[0];
+  if (!vin.txid || vin.vout === undefined || !vin.scriptSig?.hex) return false;
+
+  const reveal = parseInscriptionRevealScriptSig(vin.scriptSig.hex);
+  if (!reveal || reveal.contentType !== ZAPP_NFT_CONTENT_TYPE) return false;
+
+  const nft = parseNftContent(reveal.content);
+  if (!nft) return false;
+  if (
+    nft.mint !== burn.mint ||
+    nft.burn !== burn.signature ||
+    nft.burnId !== burn.burnId ||
+    nft.amt !== burn.amount.toString() ||
+    nft.to !== burn.recipient
+  ) {
+    return false;
+  }
+
+  let previous;
+  try {
+    previous = await getZcashTransaction(vin.txid);
+  } catch {
+    return false;
+  }
+  const prevout = previous.vout.find((output) => output.n === vin.vout);
+  if (!prevout) return false;
+
+  const expectedCommitAddress = p2shAddressForRedeemScript(reveal.redeemScript);
+  const addresses = prevout.scriptPubKey.addresses || [];
+  if (!addresses.includes(expectedCommitAddress)) return false;
+
+  return true;
+}
+
 async function indexBlock(height: number): Promise<void> {
   const db = database();
   const block = await getZcashBlock(height);
@@ -168,12 +215,14 @@ async function indexBlock(height: number): Promise<void> {
     if (!burn) continue;
 
     const recipientVout = recipientMarkerVout(tx, burn.recipient);
-    if (recipientVout === null) continue;
+    // ZApp's inscription ownership convention makes output 0 the carrying output.
+    if (recipientVout !== 0) continue;
 
     const validation = validateProofAgainstBurn(proof, burn, burn.recipient);
     if (!validation.valid) continue;
+    if (!(await verifyNftReveal(tx, burn))) continue;
 
-    await confirmIndexedClaim({
+    const confirmed = await confirmIndexedClaim({
       evidence: burn,
       payloadHex: carrier.payloadHex,
       zcashTxid: tx.txid,
@@ -182,6 +231,13 @@ async function indexBlock(height: number): Promise<void> {
       recipientVout,
       carrierVout: carrier.vout,
     });
+    if (confirmed) {
+      await markNftIndexerVerified({
+        burnId: burn.burnId,
+        revealTxid: tx.txid,
+        zcashHeight: height,
+      });
+    }
   }
 
   // Apply ownership transfers only after all claim candidates in the block have
@@ -214,15 +270,39 @@ async function indexBlock(height: number): Promise<void> {
 }
 
 async function syncOnce(): Promise<void> {
-  const startHeight = Number.parseInt(process.env.ZAPP_ZCASH_START_HEIGHT || "0", 10);
-  if (!Number.isSafeInteger(startHeight) || startHeight < 0) throw new Error("Invalid ZAPP_ZCASH_START_HEIGHT");
+  const tip = await getZcashBlockCount();
+  const configuredStart = process.env.ZAPP_ZCASH_START_HEIGHT?.trim();
+  let startHeight: number;
+
+  if (configuredStart) {
+    startHeight = Number.parseInt(configuredStart, 10);
+  } else {
+    const state = await database().query<{ height: string }>(
+      "SELECT height FROM indexer_state WHERE name=$1",
+      [STATE],
+    );
+    const resumeHeight = state.rows[0] ? Number(state.rows[0].height) : tip;
+    // A 1,000-block overlap gives fresh deployments and ordinary reorg recovery
+    // a recent safety window without scanning Zcash from genesis.
+    startHeight = Math.max(0, resumeHeight - 1000);
+  }
+
+  if (!Number.isSafeInteger(startHeight) || startHeight < 0) {
+    throw new Error("Invalid ZAPP_ZCASH_START_HEIGHT");
+  }
 
   const last = await reconcileReorg(startHeight);
-  const tip = await getZcashBlockCount();
-  const confirmations = Math.max(1, Number.parseInt(process.env.ZCASH_MIN_CONFIRMATIONS || "1", 10));
+  const confirmations = Math.max(
+    1,
+    Number.parseInt(process.env.ZCASH_MIN_CONFIRMATIONS || "1", 10),
+  );
   const safeTip = tip - (confirmations - 1);
 
-  for (let height = Math.max(startHeight, last + 1); height <= safeTip; height += 1) {
+  for (
+    let height = Math.max(startHeight, last + 1);
+    height <= safeTip;
+    height += 1
+  ) {
     await indexBlock(height);
   }
 }
