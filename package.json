@@ -27,7 +27,11 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "tweetnacl": "^1.0.3",
-    "@jup-ag/wallet-adapter": "^0.2.6"
+    "@jup-ag/wallet-adapter": "^0.2.6",
+    "@metaplex-foundation/mpl-token-metadata": "^3.4.0",
+    "@metaplex-foundation/umi": "^1.5.1",
+    "@metaplex-foundation/umi-bundle-defaults": "^1.5.1",
+    "@metaplex-foundation/umi-web3js-adapters": "^1.5.1"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
