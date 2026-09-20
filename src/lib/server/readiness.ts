@@ -292,13 +292,16 @@ export async function readinessChecks(): Promise<ReadinessCheck[]> {
 
 export async function launchReadiness(): Promise<{
   ready: boolean;
+  infrastructureReady: boolean;
   publicLaunchEnabled: boolean;
   checks: ReadinessCheck[];
 }> {
   const checks = await readinessChecks();
+  const infrastructureReady = checks.every((check) => check.ok);
   const publicLaunchEnabled = process.env.ZAPP_PUBLIC_LAUNCH_ENABLED === "true";
   return {
-    ready: publicLaunchEnabled && checks.every((check) => check.ok),
+    ready: publicLaunchEnabled && infrastructureReady,
+    infrastructureReady,
     publicLaunchEnabled,
     checks,
   };
