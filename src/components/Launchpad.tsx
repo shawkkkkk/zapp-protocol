@@ -49,6 +49,8 @@ export function Launchpad({
   const [launchImage, setLaunchImage] = useState("");
   const [launchDescription, setLaunchDescription] = useState("");
   const [createdMint, setCreatedMint] = useState("");
+  const [existingMint, setExistingMint] = useState("");
+  const [existingCreationSignature, setExistingCreationSignature] = useState("");
 
   async function connect() {
     const provider = getInjectedWallet();
@@ -136,6 +138,46 @@ export function Launchpad({
     }
   }
 
+  async function publishLaunch(input: {
+    mint: string;
+    creationSignature: string;
+    creator: string;
+  }) {
+    const provider = getInjectedWallet();
+    if (!provider?.signMessage) {
+      throw new Error("Your Solana wallet must support message signing to publish a ZApp launch");
+    }
+    if (!launchName.trim() || !launchSymbol.trim()) throw new Error("Name and ticker are required");
+
+    const launchMessage = buildLaunchMessage({
+      mint: input.mint,
+      creationSignature: input.creationSignature,
+      name: launchName,
+      symbol: launchSymbol,
+      imageUrl: launchImage || null,
+      description: launchDescription || null,
+    });
+    const authorization = await provider.signMessage(new TextEncoder().encode(launchMessage));
+
+    const registration = await fetch("/api/assets", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        creationSignature: input.creationSignature,
+        mint: input.mint,
+        creator: input.creator,
+        registrationSignature: bytesToHex(authorization.signature),
+        name: launchName,
+        symbol: launchSymbol,
+        imageUrl: launchImage || null,
+        description: launchDescription || null,
+      }),
+    });
+    const json = await registration.json();
+    if (!registration.ok) throw new Error(json.error || "Launch registration failed");
+    return json;
+  }
+
   async function createToken() {
     setMessage("");
     try {
@@ -153,41 +195,40 @@ export function Launchpad({
       const sent = await provider.signAndSendTransaction(built.transaction);
       await waitForFinalized(sent.signature);
 
-      if (!provider.signMessage) {
-        throw new Error("Your Solana wallet must support message signing to publish a ZApp launch");
-      }
-      const launchMessage = buildLaunchMessage({
+      await publishLaunch({
         mint: built.mint,
         creationSignature: sent.signature,
-        name: launchName,
-        symbol: launchSymbol,
-        imageUrl: launchImage || null,
-        description: launchDescription || null,
+        creator: connected.publicKey.toBase58(),
       });
-      const authorization = await provider.signMessage(new TextEncoder().encode(launchMessage));
-
-      const registration = await fetch("/api/assets", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          creationSignature: sent.signature,
-          mint: built.mint,
-          creator: connected.publicKey.toBase58(),
-          registrationSignature: bytesToHex(authorization.signature),
-          name: launchName,
-          symbol: launchSymbol,
-          imageUrl: launchImage || null,
-          description: launchDescription || null,
-        }),
-      });
-      const json = await registration.json();
-      if (!registration.ok) throw new Error(json.error || "Token created but launch registration failed");
 
       setCreatedMint(built.mint);
       setMint(built.mint);
       setMessage("Launch live. Mint authority is revoked and the asset is registered on ZApp.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Token creation failed");
+    }
+  }
+
+  async function registerExistingToken() {
+    setMessage("");
+    try {
+      if (!existingMint.trim() || !existingCreationSignature.trim()) {
+        throw new Error("Existing mint and its creation transaction are required");
+      }
+      const provider = getInjectedWallet();
+      if (!provider) throw new Error("No injected Solana wallet found");
+      const connected = provider.publicKey ? { publicKey: provider.publicKey } : await provider.connect();
+      setWallet(connected.publicKey.toBase58());
+
+      await publishLaunch({
+        mint: existingMint.trim(),
+        creationSignature: existingCreationSignature.trim(),
+        creator: connected.publicKey.toBase58(),
+      });
+      setMint(existingMint.trim());
+      setMessage("Existing fixed-supply asset registered. Its burn → Zcash NFT page is live.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Existing asset registration failed");
     }
   }
 
@@ -258,7 +299,12 @@ export function Launchpad({
           <label><span>Description</span><input value={launchDescription} onChange={(e) => setLaunchDescription(e.target.value)} placeholder="What is this launch?" /></label>
           <button className="secondary" onClick={createToken}>Create & launch</button>
           {createdMint && <code className="mintcode">{createdMint}</code>}
-          <small>Registration is accepted only if the creator and mint both signed the finalized creation transaction.</small>
+
+          <div className="launch-divider"><span>or onboard an existing asset</span></div>
+          <label><span>Existing SPL mint</span><input value={existingMint} onChange={(e) => setExistingMint(e.target.value.trim())} placeholder="Mint address" /></label>
+          <label><span>Mint creation transaction</span><input value={existingCreationSignature} onChange={(e) => setExistingCreationSignature(e.target.value.trim())} placeholder="Creation signature" /></label>
+          <button className="secondary" onClick={registerExistingToken}>Register existing asset</button>
+          <small>ZApp verifies the connected wallet created the mint and that mint authority is revoked before listing it.</small>
         </aside>
       )}
     </section>
