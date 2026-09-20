@@ -62,8 +62,24 @@ export async function verifyLaunchRegistration(input: {
   if (signers[0] !== input.creator) {
     throw new Error("Creator must be the fee payer / first signer of the mint creation transaction");
   }
-  if (!signers.includes(input.mint)) {
-    throw new Error("Mint account did not sign the claimed creation transaction");
+  const staticMintIndex = tx.transaction.message.accountKeys.indexOf(input.mint);
+  if (staticMintIndex < 0) {
+    throw new Error("Claimed mint is not present in the creation transaction");
+  }
+
+  const mintSignedCreation = signers.includes(input.mint);
+  const preLamports = tx.meta.preBalances?.[staticMintIndex];
+  const postLamports = tx.meta.postBalances?.[staticMintIndex];
+  const programCreatedMint =
+    preLamports === 0 &&
+    typeof postLamports === "number" &&
+    Number.isSafeInteger(postLamports) &&
+    postLamports > 0;
+
+  if (!mintSignedCreation && !programCreatedMint) {
+    throw new Error(
+      "Creation proof must either be signed by the mint or create the mint account from zero balance",
+    );
   }
 
   const rpc = connection();
