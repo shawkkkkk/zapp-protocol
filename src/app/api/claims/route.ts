@@ -4,13 +4,17 @@ import { verifyBurnTransaction } from "@/lib/server/solana";
 import { verifyBurnRaw } from "@/lib/server/solana-raw";
 import {
   acquireClaimRelay,
+  getAsset,
   getClaim,
+  getNftMint,
   listClaims,
   markClaimBroadcast,
   markClaimFailed,
+  queueNftMint,
   reserveClaim,
 } from "@/lib/server/db";
 import { broadcastProof } from "@/lib/server/zcash";
+import { encodeNftContent, nftContentCommitment, nftContentForBurn } from "@/lib/nft";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -65,13 +69,30 @@ export async function POST(request: NextRequest) {
     }
     burnId = evidence.burnId;
 
+    if (process.env.ZAPP_REQUIRE_REGISTERED_ASSET !== "false") {
+      const asset = await getAsset(evidence.mint);
+      if (!asset) throw new Error("This mint is not a public ZApp launch");
+    }
+
+    const nftContentBytes = encodeNftContent(nftContentForBurn(evidence));
+    const nftContentJson = new TextDecoder().decode(nftContentBytes);
+    const nft = await queueNftMint({
+      burnId: evidence.burnId,
+      contentJson: nftContentJson,
+      contentSha256: nftContentCommitment(nftContentBytes),
+    });
+
     const payloadHex = bytesToHex(
       encodeClaimPayload({ mint: evidence.mint, burnId: evidence.burnId, amount: evidence.amount }),
     );
     const reserved = await reserveClaim(evidence, payloadHex);
 
     if (reserved.status === "confirmed" || reserved.status === "broadcast") {
-      return NextResponse.json({ claim: publicClaim(reserved), reused: true });
+      return NextResponse.json({
+        claim: publicClaim(reserved),
+        nft: await getNftMint(evidence.burnId),
+        reused: true,
+      });
     }
 
     if (process.env.ZAPP_RELAY_ENABLED === "false") {
@@ -93,7 +114,12 @@ export async function POST(request: NextRequest) {
     acquiredRelay = await acquireClaimRelay(evidence.burnId);
     if (!acquiredRelay) {
       return NextResponse.json(
-        { claim: publicClaim(await getClaim(evidence.burnId)), reused: true, processing: true },
+        {
+          claim: publicClaim(await getClaim(evidence.burnId)),
+          nft: await getNftMint(evidence.burnId),
+          reused: true,
+          processing: true,
+        },
         { status: 202 },
       );
     }
@@ -108,6 +134,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       claim: publicClaim(await getClaim(evidence.burnId)),
+      nft,
       proof: {
         burnId: evidence.burnId,
         mint: evidence.mint,
