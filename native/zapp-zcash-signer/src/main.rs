@@ -161,6 +161,16 @@ fn secret_from_wif(wif: &str) -> Result<SecretKey> {
 }
 
 fn main() -> Result<()> {
+    if std::env::args().any(|arg| arg == "--self-test") {
+        let json = serde_json::json!({
+            "ok": true,
+            "signer": "zapp-zcash-signer",
+            "version": env!("CARGO_PKG_VERSION")
+        });
+        std::io::stdout().write_all(serde_json::to_string(&json)?.as_bytes())?;
+        return Ok(());
+    }
+
     let mut raw_input = String::new();
     std::io::stdin().read_to_string(&mut raw_input)?;
     let input: Input = serde_json::from_str(&raw_input)?;
