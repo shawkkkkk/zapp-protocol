@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listAssets, upsertAsset } from "@/lib/server/db";
-import { sanitizePublicUrl, verifyLaunchRegistration } from "@/lib/server/assets";
+import {
+  sanitizePublicUrl,
+  verifyLaunchAuthorization,
+  verifyLaunchRegistration,
+} from "@/lib/server/assets";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +31,7 @@ export async function POST(request: NextRequest) {
     const mint = cleanText(body.mint, "mint", 64);
     const creator = cleanText(body.creator, "creator", 64);
     const creationSignature = cleanText(body.creationSignature, "creationSignature", 128);
+    const registrationSignature = cleanText(body.registrationSignature, "registrationSignature", 128);
     const name = cleanText(body.name, "name", 48);
     const symbol = cleanText(body.symbol, "symbol", 12).toUpperCase();
     const description =
@@ -34,6 +39,16 @@ export async function POST(request: NextRequest) {
         ? body.description.trim().slice(0, 500)
         : null;
 
+    verifyLaunchAuthorization({
+      mint,
+      creator,
+      creationSignature,
+      registrationSignature,
+      name,
+      symbol,
+      imageUrl: typeof body.imageUrl === "string" ? body.imageUrl : null,
+      description,
+    });
     const verified = await verifyLaunchRegistration({ creationSignature, mint, creator });
     const asset = await upsertAsset({
       mint,
