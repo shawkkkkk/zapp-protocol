@@ -7,6 +7,7 @@ import {
   inscriptionDescriptor,
   splitInscriptionContent,
   estimateRevealZip317FeeZats,
+  parseInscriptionRevealScriptSig,
 } from "../src/lib/inscription.ts";
 
 const PUBKEY = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
@@ -78,4 +79,50 @@ test("ZIP-317 reveal fee is derived from serialized transparent action sizes", (
   assert.ok(fee >= 10_000n);
   assert.equal(fee % 5_000n, 0n);
   assert.ok(fee <= 60_000n);
+});
+
+
+test("reveal parser reconstructs canonical inscription content", () => {
+  const content = new TextEncoder().encode(
+    JSON.stringify({
+      p: "zapp",
+      op: "mint",
+      v: 1,
+      mint: "So11111111111111111111111111111111111111112",
+      burn: "6".repeat(88),
+      burnId: "ef".repeat(32),
+      amt: "42",
+      to: "t1P2GcxGhzeM5tPk3r3JsGh1tEVArD4C2fB",
+    }),
+  );
+  const redeem = buildRedeemScript({ compressedPubkeyHex: PUBKEY, content });
+  const signature = Uint8Array.from(new Array(72).fill(7));
+  const scriptSig = buildRevealScriptSig({
+    content,
+    signatureWithHashType: signature,
+    redeemScript: redeem,
+  });
+
+  const parsed = parseInscriptionRevealScriptSig(Buffer.from(scriptSig).toString("hex"));
+  assert.ok(parsed);
+  assert.equal(new TextDecoder().decode(parsed.content), new TextDecoder().decode(content));
+  assert.equal(parsed.contentType, "application/json");
+  assert.equal(parsed.compressedPubkeyHex, PUBKEY);
+});
+
+test("reveal parser rejects a tampered redeem commitment", () => {
+  const content = new TextEncoder().encode('{"p":"zapp","op":"mint","v":1,"mint":"x","burn":"y","burnId":"z","amt":"1","to":"t"}');
+  const redeem = buildRedeemScript({ compressedPubkeyHex: PUBKEY, content });
+  const tampered = Uint8Array.from(redeem);
+  tampered[tampered.length - 1] ^= 1;
+
+  const scriptSig = buildRevealScriptSig({
+    content,
+    signatureWithHashType: Uint8Array.from(new Array(72).fill(3)),
+    redeemScript: tampered,
+  });
+  assert.equal(
+    parseInscriptionRevealScriptSig(Buffer.from(scriptSig).toString("hex")),
+    null,
+  );
 });
