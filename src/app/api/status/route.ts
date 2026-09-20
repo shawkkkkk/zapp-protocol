@@ -18,6 +18,7 @@ export async function GET() {
     sourceChain: "solana-mainnet",
     anchorChain: "zcash-mainnet",
     nativeZsa: false,
+    publicLaunchEnabled: process.env.ZAPP_PUBLIC_LAUNCH_ENABLED === "true",
     launchpadEnabled: process.env.ZAPP_REQUIRE_REGISTERED_ASSET !== "false",
     nftMintEnabled: process.env.ZAPP_NFT_MINT_ENABLED !== "false",
     relayConfigured: Boolean(
