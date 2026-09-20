@@ -50,6 +50,7 @@ It must report PASS for:
 - wallet-owned inscription signer;
 - minimum relay ZEC balance;
 - fresh NFT-worker heartbeat;
+- fresh automatic Solana burn-watcher heartbeat;
 - fresh independent Zcash-indexer heartbeat;
 - immutable image/rate-limit/attestation/indexer-verification schema;
 - permanent custom metadata origin; and
@@ -75,16 +76,17 @@ burn amount.
 Verify in order:
 
 1. Solana burn reaches finalized.
-2. `/api/claims` reconstructs the raw BurnChecked and destination.
-3. NFT job enters `queued` / `building`.
-4. Commit transaction is broadcast and confirmed.
-5. Reveal transaction is broadcast and confirmed.
-6. The reveal contains the ZApp NFT content and compact Proof carrier.
-7. The destination owns output 0 / current marker.
-8. Explorer shows the same burn amount, mint, destination and inscription id.
-9. Stop/restart the worker and verify no duplicate inscription is produced.
-10. Run the independent indexer/state-root reconstruction.
-11. Run `npm run canary:audit -- <burnId>` and require every line to PASS.
+2. Confirm the automatic Solana watcher discovers and queues the burn without relying on the browser.
+3. `/api/claims` recovery remains idempotent for the same burn.
+4. NFT job enters `queued` / `building`.
+5. Commit transaction is broadcast and confirmed.
+6. Reveal transaction is broadcast and confirmed.
+7. The reveal contains the ZApp NFT content and compact Proof carrier.
+8. The destination owns output 0 / current marker.
+9. Explorer shows the same burn amount, mint, destination and inscription id.
+10. Stop/restart the backend worker and verify no duplicate inscription is produced.
+11. Run the independent indexer/state-root reconstruction.
+12. Run `npm run canary:audit -- <burnId>` and require every line to PASS.
 
 The canary audit requires the worker-confirmed reveal transaction to equal the canonical
 indexed claim and requires `indexer_verified_at` to be present. Do not enable public burns
