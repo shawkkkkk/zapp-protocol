@@ -332,8 +332,8 @@ export function LaunchCreator() {
         </label>
 
         <div className="form-grid">
-          <label>
-            <span>Token image</span>
+          <div className="field-block">
+            <span className="field-label">Token image</span>
             <div className="image-upload-field">
               <label className="image-upload-button">
                 <input
@@ -363,7 +363,7 @@ export function LaunchCreator() {
                 {imageFile ? imageFile.name : "PNG, JPG, GIF or WebP · max 2 MB"}
               </div>
             </div>
-          </label>
+          </div>
           <label>
             <span>Website</span>
             <input
