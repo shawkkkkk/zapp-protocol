@@ -5,6 +5,7 @@ import {
   getClaimByOwnerOutpoint,
   rebuildOwnershipFromTransfers,
   terminateIndexedOwnership,
+  heartbeatService,
 } from "../src/lib/server/db.ts";
 import { decodeClaimPayload, hexToBytes } from "../src/lib/protocol.ts";
 import { findBurnRawByCommitment } from "../src/lib/server/solana-raw.ts";
@@ -228,14 +229,23 @@ async function syncOnce(): Promise<void> {
 
 async function main() {
   const watch = process.argv.includes("--watch");
+  await heartbeatService("zcash-indexer", "starting", "initial chain reconciliation");
   do {
     await syncOnce();
+    await heartbeatService("zcash-indexer", "ready", "canonical chain synced");
     if (!watch) break;
     await new Promise((resolve) => setTimeout(resolve, 30_000));
   } while (true);
 }
 
-main().catch((error) => {
+main().catch(async (error) => {
   console.error(error);
+  try {
+    await heartbeatService(
+      "zcash-indexer",
+      "error",
+      error instanceof Error ? error.message.slice(0, 500) : "indexer error",
+    );
+  } catch {}
   process.exit(1);
 });
