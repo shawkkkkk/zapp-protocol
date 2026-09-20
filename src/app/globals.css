@@ -217,3 +217,17 @@ th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spa
   font-size: 12px;
   line-height: 1.5;
 }
+
+.launchgate {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #665f2d;
+  background: rgba(240, 210, 80, .07);
+  border-radius: 14px;
+  padding: 13px 16px;
+  color: #d8d2a7;
+  font-size: 13px;
+}
+.launchgate b { color: #f1e56a; white-space: nowrap; }
