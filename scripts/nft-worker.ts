@@ -6,6 +6,7 @@ import {
   markClaimBroadcast,
   markClaimFailed,
   updateNftMint,
+  heartbeatService,
 } from "../src/lib/server/db.ts";
 import { inscriptionDescriptor } from "../src/lib/inscription.ts";
 import { parseNftContent } from "../src/lib/nft.ts";
@@ -27,6 +28,31 @@ if (POSTAGE_ZATS !== MARKER_ZATS) {
 const SIGNER_BIN =
   process.env.ZAPP_INSCRIPTION_SIGNER_BIN ||
   "native/zapp-zcash-signer/target/release/zapp-zcash-signer";
+
+
+async function selfTestSigner(): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(SIGNER_BIN, ["--self-test"], { stdio: ["ignore", "pipe", "pipe"] });
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    child.stdout.on("data", (chunk) => stdout.push(Buffer.from(chunk)));
+    child.stderr.on("data", (chunk) => stderr.push(Buffer.from(chunk)));
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code !== 0) {
+        reject(new Error("Inscription signer self-test failed: " + Buffer.concat(stderr).toString("utf8").slice(0, 1000)));
+        return;
+      }
+      try {
+        const body = JSON.parse(Buffer.concat(stdout).toString("utf8")) as { ok?: boolean };
+        if (body.ok !== true) throw new Error("signer did not report ok");
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
+}
 
 function zec(zats: bigint): number {
   if (zats < 0n || zats > 100_000_000n) throw new Error("Unexpected worker ZEC amount");
@@ -323,14 +349,24 @@ async function processOne(): Promise<boolean> {
 }
 
 async function main() {
+  await selfTestSigner();
+  await heartbeatService("nft-worker", "ready", "signer self-test passed");
   const watch = process.argv.includes("--watch");
   do {
     try {
       const worked = await processOne();
+      await heartbeatService("nft-worker", "ready", worked ? "processed queue item" : "idle");
       if (!watch) break;
       if (!worked) await new Promise((resolve) => setTimeout(resolve, 3000));
     } catch (error) {
       console.error(error);
+      try {
+        await heartbeatService(
+          "nft-worker",
+          "error",
+          error instanceof Error ? error.message.slice(0, 500) : "worker error",
+        );
+      } catch {}
       if (!watch) throw error;
       await new Promise((resolve) => setTimeout(resolve, 5000));
     }
