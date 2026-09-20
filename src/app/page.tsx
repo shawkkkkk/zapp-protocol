@@ -1,5 +1,6 @@
 import { AssetDiscovery } from "@/components/AssetDiscovery";
 import { LaunchCreator } from "@/components/LaunchCreator";
+import { RecentProofs } from "@/components/RecentProofs";
 
 export default function Home() {
   return (
@@ -65,6 +66,8 @@ export default function Home() {
         </div>
         <AssetDiscovery />
       </section>
+
+      <RecentProofs />
 
       <section className="minimal-disclosure shell">
         <b>NFT now. Native asset later.</b>
