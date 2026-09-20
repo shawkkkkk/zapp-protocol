@@ -244,6 +244,25 @@ export default async function ProofPage({
               Share proof on X ↗
             </a>
             <a href={proofUrl}>Permanent proof link ↗</a>
+            <a
+              href={"https://solscan.io/tx/" + claim.solana_signature + "?cluster=mainnet"}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Verify Solana burn ↗
+            </a>
+            {(nft?.reveal_txid || claim.zcash_txid) && (
+              <a
+                href={
+                  "https://blockexplorer.one/zcash/mainnet/tx/" +
+                  (nft?.reveal_txid || claim.zcash_txid)
+                }
+                target="_blank"
+                rel="noreferrer"
+              >
+                Verify Zcash reveal ↗
+              </a>
+            )}
           </div>
           <p>
             ZApp proofs are public inscription/NFT claim objects. They are not
