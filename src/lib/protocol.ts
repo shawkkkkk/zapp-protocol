@@ -1,7 +1,9 @@
 export const ZAPP_MAGIC = "ZAPP";
 export const ZAPP_VERSION = 1;
 export const OP_CLAIM = 1;
+export const OP_TRANSFER = 2;
 export const CLAIM_PAYLOAD_BYTES = 78;
+export const TRANSFER_PAYLOAD_BYTES = 38;
 export const U64_MAX = (1n << 64n) - 1n;
 export const ZAPP_MEMO_PREFIX = "ZAPP1:";
 
@@ -15,6 +17,14 @@ export type ZAppProof = {
   burnId: string;
   amount: bigint;
 };
+
+export type ZAppTransfer = {
+  version: 1;
+  operation: "transfer";
+  burnId: string;
+};
+
+export type ZAppPayload = ZAppProof | ZAppTransfer;
 
 export function base58Decode(value: string): Uint8Array {
   if (!value) return new Uint8Array();
@@ -95,6 +105,39 @@ export function decodeClaimPayload(bytes: Uint8Array): ZAppProof {
     burnId: bytesToHex(bytes.slice(38, 70)),
     amount: new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getBigUint64(70, true),
   };
+}
+
+
+export function encodeTransferPayload(input: { burnId: string }): Uint8Array {
+  const burnId = hexToBytes(input.burnId, 32);
+  const out = new Uint8Array(TRANSFER_PAYLOAD_BYTES);
+  out.set(new TextEncoder().encode(ZAPP_MAGIC), 0);
+  out[4] = ZAPP_VERSION;
+  out[5] = OP_TRANSFER;
+  out.set(burnId, 6);
+  return out;
+}
+
+export function decodeTransferPayload(bytes: Uint8Array): ZAppTransfer {
+  if (bytes.length !== TRANSFER_PAYLOAD_BYTES) {
+    throw new Error(`Invalid ZApp transfer payload length: ${bytes.length}`);
+  }
+  const magic = new TextDecoder().decode(bytes.slice(0, 4));
+  if (magic !== ZAPP_MAGIC || bytes[4] !== ZAPP_VERSION || bytes[5] !== OP_TRANSFER) {
+    throw new Error("Unsupported ZApp transfer payload");
+  }
+  return {
+    version: 1,
+    operation: "transfer",
+    burnId: bytesToHex(bytes.slice(6, 38)),
+  };
+}
+
+export function decodeProtocolPayload(bytes: Uint8Array): ZAppPayload {
+  if (bytes.length < 6) throw new Error("ZApp payload is too short");
+  if (bytes[5] === OP_CLAIM) return decodeClaimPayload(bytes);
+  if (bytes[5] === OP_TRANSFER) return decodeTransferPayload(bytes);
+  throw new Error("Unknown ZApp operation");
 }
 
 export function encodeOpReturnScript(payload: Uint8Array): Uint8Array {
