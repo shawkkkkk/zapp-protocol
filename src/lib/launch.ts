@@ -7,6 +7,7 @@ export type LaunchMessageInput = {
   description?: string | null;
   websiteUrl?: string | null;
   xUrl?: string | null;
+  minBurnBaseUnits: string;
 };
 
 export function buildLaunchMessage(input: LaunchMessageInput): string {
@@ -19,5 +20,6 @@ export function buildLaunchMessage(input: LaunchMessageInput): string {
     (input.description || "").trim(),
     (input.websiteUrl || "").trim(),
     (input.xUrl || "").trim(),
+    input.minBurnBaseUnits.trim(),
   ]);
 }
