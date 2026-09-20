@@ -1,9 +1,16 @@
-import { database, confirmIndexedClaim } from "../src/lib/server/db.ts";
+import {
+  applyIndexedTransfer,
+  database,
+  confirmIndexedClaim,
+  getClaim,
+  rebuildOwnershipFromTransfers,
+} from "../src/lib/server/db.ts";
 import { decodeClaimPayload, hexToBytes } from "../src/lib/protocol.ts";
 import { findBurnRawByCommitment } from "../src/lib/server/solana-raw.ts";
 import { validateProofAgainstBurn } from "../src/lib/validation.ts";
 import {
   findClaimPayloads,
+  findTransferPayloads,
   getZcashBlock,
   getZcashBlockCount,
   getZcashBlockHash,
@@ -42,6 +49,7 @@ async function reconcileReorg(startHeight: number): Promise<number> {
       "UPDATE claims SET status='invalidated', zcash_height=NULL, zcash_tx_index=NULL, updated_at=NOW() WHERE zcash_height > $1",
       [height],
     );
+    await client.query("DELETE FROM transfers WHERE zcash_height > $1", [height]);
     await client.query("DELETE FROM zcash_blocks WHERE height > $1", [height]);
     if (height >= startHeight) {
       const hash = await getZcashBlockHash(height);
@@ -60,6 +68,7 @@ async function reconcileReorg(startHeight: number): Promise<number> {
   } finally {
     client.release();
   }
+  await rebuildOwnershipFromTransfers();
   return height;
 }
 
@@ -73,6 +82,52 @@ function recipientMarkerVout(
       BigInt(vout.valueZat ?? -1) === markerZats(),
   );
   return matches.length === 1 ? matches[0].n : null;
+}
+
+
+function transferDestination(
+  tx: { vout: Array<{ n: number; valueZat?: number; scriptPubKey: { addresses?: string[] } }> },
+): { owner: string; vout: number } | null {
+  const candidates = tx.vout
+    .filter((vout) => BigInt(vout.valueZat ?? -1) === markerZats())
+    .map((vout) => ({ vout: vout.n, addresses: vout.scriptPubKey.addresses || [] }))
+    .filter((row) => row.addresses.length === 1);
+  if (candidates.length !== 1) return null;
+  const owner = candidates[0].addresses[0];
+  if (!/^t[13]/.test(owner)) return null;
+  return { owner, vout: candidates[0].vout };
+}
+
+async function indexTransfer(
+  tx: Awaited<ReturnType<typeof getZcashBlock>>["tx"][number],
+  height: number,
+  txIndex: number,
+): Promise<void> {
+  const payloads = findTransferPayloads(tx);
+  if (payloads.length !== 1) return;
+  const payload = payloads[0];
+  const claim = await getClaim(payload.burnId);
+  if (!claim || claim.status !== "confirmed" || !claim.owner_txid || claim.owner_vout === null) return;
+
+  const spendsCurrentMarker = (tx.vin || []).some(
+    (vin) => vin.txid === claim.owner_txid && vin.vout === claim.owner_vout,
+  );
+  if (!spendsCurrentMarker) return;
+
+  const destination = transferDestination(tx);
+  if (!destination) return;
+
+  await applyIndexedTransfer({
+    burnId: payload.burnId,
+    txid: tx.txid,
+    zcashHeight: height,
+    zcashTxIndex: txIndex,
+    fromTxid: claim.owner_txid,
+    fromVout: claim.owner_vout,
+    toOwner: destination.owner,
+    toVout: destination.vout,
+    payloadVout: payload.vout,
+  });
 }
 
 async function indexBlock(height: number): Promise<void> {
@@ -110,6 +165,12 @@ async function indexBlock(height: number): Promise<void> {
       recipientVout,
       carrierVout: carrier.vout,
     });
+  }
+
+  // Apply ownership transfers only after all claim candidates in the block have
+  // had a chance to become canonical. Transactions remain processed in chain order.
+  for (let txIndex = 0; txIndex < block.tx.length; txIndex += 1) {
+    await indexTransfer(block.tx[txIndex], height, txIndex);
   }
 
   const client = await db.connect();
