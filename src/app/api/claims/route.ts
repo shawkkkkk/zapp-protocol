@@ -1,19 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { encodeClaimPayload, bytesToHex } from "@/lib/protocol";
+import { bytesToHex, encodeClaimPayload } from "@/lib/protocol";
 import { verifyBurnTransaction } from "@/lib/server/solana";
 import { verifyBurnRaw } from "@/lib/server/solana-raw";
 import {
-  acquireClaimRelay,
   getAsset,
   getClaim,
   getNftMint,
   listClaims,
-  markClaimBroadcast,
-  markClaimFailed,
   queueNftMint,
   reserveClaim,
 } from "@/lib/server/db";
-import { broadcastProof } from "@/lib/server/zcash";
 import { encodeNftContent, nftContentCommitment, nftContentForBurn } from "@/lib/nft";
 
 export const runtime = "nodejs";
@@ -28,7 +24,7 @@ function publicClaim(row: Awaited<ReturnType<typeof getClaim>>) {
     amountBaseUnits: row.amount_base_units,
     recipient: row.recipient,
     currentOwner: row.current_owner,
-    ownerOutpoint: row.owner_txid && row.owner_vout !== null ? `${row.owner_txid}:${row.owner_vout}` : null,
+    ownerOutpoint: row.owner_txid && row.owner_vout !== null ? row.owner_txid + ":" + row.owner_vout : null,
     zcashTxid: row.zcash_txid,
     zcashHeight: row.zcash_height,
     status: row.status,
@@ -48,14 +44,13 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  let burnId: string | null = null;
-  let acquiredRelay = false;
   try {
     const body = (await request.json()) as { solanaSignature?: string };
     const signature = body.solanaSignature?.trim();
     if (!signature) return NextResponse.json({ error: "solanaSignature is required" }, { status: 400 });
 
     const evidence = await verifyBurnRaw(signature);
+
     if (BigInt(process.env.ZAPP_FEE_LAMPORTS || "0") > 0n) {
       const feeEvidence = await verifyBurnTransaction(signature, undefined, { requireRelayFee: true });
       if (
@@ -67,91 +62,53 @@ export async function POST(request: NextRequest) {
         throw new Error("Relay-fee parser disagrees with the canonical raw burn verifier");
       }
     }
-    burnId = evidence.burnId;
 
     if (process.env.ZAPP_REQUIRE_REGISTERED_ASSET !== "false") {
       const asset = await getAsset(evidence.mint);
       if (!asset) throw new Error("This mint is not a public ZApp launch");
     }
 
-    const nftContentBytes = encodeNftContent(nftContentForBurn(evidence));
-    const nftContentJson = new TextDecoder().decode(nftContentBytes);
-    const nft = await queueNftMint({
-      burnId: evidence.burnId,
-      contentJson: nftContentJson,
-      contentSha256: nftContentCommitment(nftContentBytes),
-    });
-
     const payloadHex = bytesToHex(
       encodeClaimPayload({ mint: evidence.mint, burnId: evidence.burnId, amount: evidence.amount }),
     );
-    const reserved = await reserveClaim(evidence, payloadHex);
+    const claim = await reserveClaim(evidence, payloadHex);
 
-    if (reserved.status === "confirmed" || reserved.status === "broadcast") {
-      return NextResponse.json({
-        claim: publicClaim(reserved),
-        nft: await getNftMint(evidence.burnId),
-        reused: true,
-      });
-    }
+    const contentBytes = encodeNftContent(nftContentForBurn(evidence));
+    const nft = await queueNftMint({
+      burnId: evidence.burnId,
+      contentJson: new TextDecoder().decode(contentBytes),
+      contentSha256: nftContentCommitment(contentBytes),
+    });
 
-    if (process.env.ZAPP_RELAY_ENABLED === "false") {
+    if (process.env.ZAPP_NFT_MINT_ENABLED === "false") {
       return NextResponse.json(
         {
-          error: "Sponsored Zcash relay is disabled",
-          proof: {
-            burnId: evidence.burnId,
-            mint: evidence.mint,
-            amountBaseUnits: evidence.amount.toString(),
-            recipient: evidence.recipient,
-            payloadHex,
-          },
+          error: "NFT mint worker is disabled",
+          claim: publicClaim(claim),
+          nft,
         },
         { status: 503 },
       );
     }
 
-    acquiredRelay = await acquireClaimRelay(evidence.burnId);
-    if (!acquiredRelay) {
-      return NextResponse.json(
-        {
-          claim: publicClaim(await getClaim(evidence.burnId)),
-          nft: await getNftMint(evidence.burnId),
-          reused: true,
-          processing: true,
+    return NextResponse.json(
+      {
+        claim: publicClaim(await getClaim(evidence.burnId)),
+        nft: await getNftMint(evidence.burnId),
+        proof: {
+          burnId: evidence.burnId,
+          mint: evidence.mint,
+          amountBaseUnits: evidence.amount.toString(),
+          recipient: evidence.recipient,
+          payloadHex,
         },
-        { status: 202 },
-      );
-    }
-
-    const broadcast = await broadcastProof(evidence);
-    await markClaimBroadcast({
-      burnId: evidence.burnId,
-      txid: broadcast.txid,
-      recipientVout: broadcast.recipientVout,
-      carrierVout: broadcast.carrierVout,
-    });
-
-    return NextResponse.json({
-      claim: publicClaim(await getClaim(evidence.burnId)),
-      nft,
-      proof: {
-        burnId: evidence.burnId,
-        mint: evidence.mint,
-        amountBaseUnits: evidence.amount.toString(),
-        recipient: evidence.recipient,
-        payloadHex: broadcast.payloadHex,
       },
-    });
+      { status: claim.status === "broadcast" || claim.status === "confirmed" ? 200 : 202 },
+    );
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Claim failed";
-    if (burnId && acquiredRelay) {
-      try {
-        await markClaimFailed(burnId, message);
-      } catch {
-        // Preserve the original protocol/RPC error.
-      }
-    }
-    return NextResponse.json({ error: message }, { status: 400 });
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Claim failed" },
+      { status: 400 },
+    );
   }
 }
