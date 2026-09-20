@@ -744,21 +744,24 @@ export type ServiceHealthRow = {
   status: string;
   details: string | null;
   heartbeat_at: string;
+  metadata: Record<string, unknown> | null;
 };
 
 export async function heartbeatService(
   service: string,
   status: string,
   details?: string | null,
+  metadata?: Record<string, unknown> | null,
 ): Promise<void> {
   await database().query(
-    `INSERT INTO service_health(service,status,details,heartbeat_at)
-     VALUES ($1,$2,$3,NOW())
+    `INSERT INTO service_health(service,status,details,metadata,heartbeat_at)
+     VALUES ($1,$2,$3,$4,NOW())
      ON CONFLICT(service) DO UPDATE SET
        status=EXCLUDED.status,
        details=EXCLUDED.details,
+       metadata=EXCLUDED.metadata,
        heartbeat_at=NOW()`,
-    [service, status, details || null],
+    [service, status, details || null, metadata ? JSON.stringify(metadata) : null],
   );
 }
 
