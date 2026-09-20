@@ -21,6 +21,8 @@ Apply:
 ```bash
 psql "$DATABASE_URL" -f db/001_init.sql
 psql "$DATABASE_URL" -f db/002_transfers.sql
+psql "$DATABASE_URL" -f db/003_launchpad.sql
+psql "$DATABASE_URL" -f db/004_ownership.sql
 ```
 
 ## Indexer start height
@@ -36,11 +38,19 @@ npm install
 npm test
 npm run typecheck
 npm run build
+npm run build:signer
+
+# public web/API process
 npm run start
+
+# private processes
+npm run worker:nft
 npm run index:zcash -- --watch
 ```
 
-Run the web application and indexer as separate processes.
+Run the public web application, NFT worker and chain indexer as separate processes.
+Only the NFT worker should receive Zcash wallet RPC credentials and
+`ZAPP_NFT_SIGNER_TADDR`.
 
 ## Fail-closed checks
 
@@ -53,9 +63,11 @@ A production launch should not be announced until all of these work end to end:
 - wrong amount rejection
 - duplicate burn rejection
 - Zcash address validation
-- Zcash transaction construction
-- Zcash broadcast
-- block inclusion
+- Zerdinals-compatible commit construction
+- commit confirmation
+- ZIP-244 reveal signing in the isolated native signer
+- reveal transaction containing both the NFT envelope and ZApp proof
+- reveal broadcast and block inclusion
 - indexer reconstruction from chain data
 - reorg replay
 - clean rebuild into an empty database
@@ -72,8 +84,8 @@ compare:
 npm run state:root
 ```
 
-Both instances should report the same indexed height, block hash, Proof count, aggregate
-amount and state root.
+Both instances should report the same indexed height, block hash, Proof count, per-mint
+totals and state root.
 
 ## Relay outage / rescue
 
@@ -88,11 +100,12 @@ The resulting Proof still has to pass the canonical chain indexer.
 
 ## Ownership transfer
 
-The wallet that controls the current marker outpoint can transfer ownership:
+ZApp-aware tooling can construct a transfer:
 
 ```bash
 npm run transfer:proof -- <burn-id> <new-zcash-t-address>
 ```
 
-The indexer accepts the change only after the transaction is confirmed and verifies that it
-spent the current marker and created exactly one replacement marker.
+The transfer annotation is optional for tracking. Canonical ownership follows the carrying
+outpoint even when an ordinary Zcash wallet spends it, moving to the first transparent
+non-data output.
