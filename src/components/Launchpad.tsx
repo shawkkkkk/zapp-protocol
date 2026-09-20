@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { Connection } from "@solana/web3.js";
+import { buildLaunchMessage } from "@/lib/launch";
+import { bytesToHex } from "@/lib/protocol";
 import {
   browserSolanaRpc,
   buildBurnAndProofTransaction,
@@ -151,6 +153,19 @@ export function Launchpad({
       const sent = await provider.signAndSendTransaction(built.transaction);
       await waitForFinalized(sent.signature);
 
+      if (!provider.signMessage) {
+        throw new Error("Your Solana wallet must support message signing to publish a ZApp launch");
+      }
+      const launchMessage = buildLaunchMessage({
+        mint: built.mint,
+        creationSignature: sent.signature,
+        name: launchName,
+        symbol: launchSymbol,
+        imageUrl: launchImage || null,
+        description: launchDescription || null,
+      });
+      const authorization = await provider.signMessage(new TextEncoder().encode(launchMessage));
+
       const registration = await fetch("/api/assets", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -158,6 +173,7 @@ export function Launchpad({
           creationSignature: sent.signature,
           mint: built.mint,
           creator: connected.publicKey.toBase58(),
+          registrationSignature: bytesToHex(authorization.signature),
           name: launchName,
           symbol: launchSymbol,
           imageUrl: launchImage || null,
