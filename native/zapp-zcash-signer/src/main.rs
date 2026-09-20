@@ -179,8 +179,10 @@ fn main() -> Result<()> {
     let tx_for_sighash = Transaction::read(&raw_tx[..], BranchId::Nu5)?;
     let tx_for_signing = Transaction::read(&raw_tx[..], BranchId::Nu5)?;
 
-    if tx_for_sighash.version() < zcash_primitives::transaction::TxVersion::V5 {
-        bail!("ZApp inscription signer only accepts V5+ Zcash transactions");
+    match tx_for_sighash.version() {
+        zcash_primitives::transaction::TxVersion::V5 |
+        zcash_primitives::transaction::TxVersion::V6 => {}
+        _ => bail!("ZApp inscription signer only accepts V5+ Zcash transactions"),
     }
 
     let prev_value = Zatoshis::from_nonnegative_i64(input.prev_value_zats)
