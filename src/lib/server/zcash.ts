@@ -62,6 +62,10 @@ export type DecodedVin = {
   txid?: string;
   vout?: number;
   coinbase?: string;
+  scriptSig?: {
+    hex?: string;
+    asm?: string;
+  };
 };
 
 export type DecodedTx = {
@@ -366,4 +370,13 @@ export async function getZcashBlock(
   rpc = new ZcashRpc(),
 ): Promise<{ hash: string; height: number; tx: DecodedTx[] }> {
   return rpc.call("getblock", [String(heightOrHash), 2]);
+}
+
+
+export async function getZcashTransaction(
+  txid: string,
+  rpc = new ZcashRpc(),
+): Promise<DecodedTx> {
+  if (!/^[0-9a-f]{64}$/i.test(txid)) throw new Error("Invalid Zcash transaction id");
+  return rpc.call<DecodedTx>("getrawtransaction", [txid, 1]);
 }
