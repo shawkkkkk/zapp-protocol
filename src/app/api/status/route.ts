@@ -73,12 +73,7 @@ export async function GET() {
       launchpadEnabled:
         process.env.ZAPP_REQUIRE_REGISTERED_ASSET !== "false",
       nftMintEnabled: process.env.ZAPP_NFT_MINT_ENABLED !== "false",
-      relayConfigured: Boolean(
-        process.env.ZCASH_RPC_URL &&
-          process.env.ZCASH_RPC_USER &&
-          process.env.ZCASH_RPC_PASSWORD &&
-          process.env.ZAPP_NFT_SIGNER_TADDR,
-      ),
+      relayConfigured: worker?.metadata?.relayOk === true,
       dedicatedSolanaRpc: Boolean(
         process.env.SOLANA_RPC_URL &&
           !process.env.SOLANA_RPC_URL.includes(
