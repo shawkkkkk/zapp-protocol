@@ -2,13 +2,11 @@
 
 import { useState } from "react";
 import { Connection } from "@solana/web3.js";
-import { buildLaunchMessage } from "@/lib/launch";
-import { bytesToHex } from "@/lib/protocol";
+import { useUnifiedWallet } from "@jup-ag/wallet-adapter";
+import { ZAppWalletButton } from "@/components/ZAppWalletButton";
 import {
   browserSolanaRpc,
   buildBurnAndProofTransaction,
-  buildFixedSupplyMintTransaction,
-  getInjectedWallet,
 } from "@/lib/client/solana";
 
 type Stage = "idle" | "signing" | "finalizing" | "anchoring" | "done";
@@ -16,21 +14,26 @@ type Stage = "idle" | "signing" | "finalizing" | "anchoring" | "done";
 async function waitForFinalized(signature: string): Promise<void> {
   const connection = new Connection(browserSolanaRpc(), "confirmed");
   for (let attempt = 0; attempt < 80; attempt += 1) {
-    const result = await connection.getSignatureStatuses([signature], { searchTransactionHistory: true });
+    const result = await connection.getSignatureStatuses(
+      [signature],
+      { searchTransactionHistory: true },
+    );
     const status = result.value[0];
     if (status?.err) throw new Error("Solana transaction failed");
     if (status?.confirmationStatus === "finalized") return;
     await new Promise((resolve) => setTimeout(resolve, 1500));
   }
-  throw new Error("Solana transaction was not finalized in the expected window. Retry with the same signature.");
+  throw new Error(
+    "Solana transaction was not finalized in the expected window. Retry with the same signature.",
+  );
 }
 
-const publicLaunchEnabled = process.env.NEXT_PUBLIC_ZAPP_PUBLIC_LAUNCH_ENABLED === "true";
+const publicLaunchEnabled =
+  process.env.NEXT_PUBLIC_ZAPP_PUBLIC_LAUNCH_ENABLED === "true";
 
 export function Launchpad({
   initialMint = "",
   initialSymbol = "",
-  hideCreator = false,
   minimumBurnLabel = "",
 }: {
   initialMint?: string;
@@ -38,36 +41,26 @@ export function Launchpad({
   hideCreator?: boolean;
   minimumBurnLabel?: string;
 }) {
-  const [wallet, setWallet] = useState("");
+  const { publicKey, sendTransaction, wallet } = useUnifiedWallet();
   const [mint, setMint] = useState(initialMint);
   const [amount, setAmount] = useState("");
   const [zcashAddress, setZcashAddress] = useState("");
   const [stage, setStage] = useState<Stage>("idle");
   const [message, setMessage] = useState("");
-  const [result, setResult] = useState<{ solana?: string; zcash?: string; burnId?: string; nft?: string }>({});
+  const [result, setResult] = useState<{
+    solana?: string;
+    zcash?: string;
+    burnId?: string;
+    nft?: string;
+  }>({});
   const [recoverySignature, setRecoverySignature] = useState("");
-
-  const [createSupply, setCreateSupply] = useState("1000000000");
-  const [createDecimals, setCreateDecimals] = useState("6");
-  const [launchName, setLaunchName] = useState("");
-  const [launchSymbol, setLaunchSymbol] = useState("");
-  const [launchImage, setLaunchImage] = useState("");
-  const [launchDescription, setLaunchDescription] = useState("");
-  const [createdMint, setCreatedMint] = useState("");
-  const [existingMint, setExistingMint] = useState("");
-  const [existingCreationSignature, setExistingCreationSignature] = useState("");
-
-  async function connect() {
-    const provider = getInjectedWallet();
-    if (!provider) throw new Error("No injected Solana wallet found. Install a compatible wallet such as Phantom.");
-    const connected = await provider.connect();
-    setWallet(connected.publicKey.toBase58());
-  }
 
   async function watchNft(burnId: string) {
     for (let attempt = 0; attempt < 180; attempt += 1) {
       try {
-        const response = await fetch("/api/claims/" + burnId, { cache: "no-store" });
+        const response = await fetch("/api/claims/" + burnId, {
+          cache: "no-store",
+        });
         if (response.ok) {
           const json = await response.json();
           const status = json.nft?.status;
@@ -78,11 +71,16 @@ export function Launchpad({
               nft: status,
             }));
             if (status === "confirmed") {
-              setMessage("Zcash NFT confirmed. Inscription: " + json.nft.inscriptionId);
+              setMessage(
+                "Zcash NFT confirmed. Inscription: " + json.nft.inscriptionId,
+              );
               return;
             }
             if (status === "failed") {
-              setMessage("NFT mint needs a retry: " + (json.nft.error || "worker error"));
+              setMessage(
+                "NFT mint needs a retry: " +
+                  (json.nft.error || "worker error"),
+              );
               return;
             }
           }
@@ -102,6 +100,7 @@ export function Launchpad({
     if (!response.ok && response.status !== 202) {
       throw new Error(json.error || "Zcash NFT claim failed");
     }
+
     const burnId = json.proof?.burnId || json.claim?.burnId;
     setResult({
       solana: signature,
@@ -116,7 +115,9 @@ export function Launchpad({
   async function recoverBurn() {
     setMessage("");
     if (!publicLaunchEnabled) {
-      setMessage("ZApp is in preview mode. Public burns and NFT claims are locked until production readiness passes.");
+      setMessage(
+        "ZApp is in preview mode. Public burns and NFT claims are locked until production readiness passes.",
+      );
       return;
     }
     const signature = recoverySignature.trim();
@@ -124,6 +125,7 @@ export function Launchpad({
       setMessage("Paste the finalized Solana burn transaction signature.");
       return;
     }
+
     try {
       setStage("anchoring");
       const json = await claimFromSignature(signature);
@@ -131,47 +133,55 @@ export function Launchpad({
       setMessage(
         json.nft?.status === "confirmed"
           ? "This burn already has a confirmed Zcash NFT."
-          : "Burn recovered and queued. Watching NFT delivery now…"
+          : "Burn recovered and queued. Watching NFT delivery now…",
       );
     } catch (error) {
       setStage("idle");
-      setMessage(error instanceof Error ? error.message : "Burn recovery failed");
+      setMessage(
+        error instanceof Error ? error.message : "Burn recovery failed",
+      );
     }
   }
 
   async function migrate() {
     setMessage("");
     if (!publicLaunchEnabled) {
-      setMessage("ZApp is in preview mode. Public burns are locked until production readiness passes.");
+      setMessage(
+        "ZApp is in preview mode. Public burns are locked until production readiness passes.",
+      );
       return;
     }
+    if (!publicKey) {
+      setMessage("Connect a Solana wallet first.");
+      return;
+    }
+
     setResult({});
     try {
-      const provider = getInjectedWallet();
-      if (!provider) throw new Error("No injected Solana wallet found");
-      const connected = provider.publicKey ? { publicKey: provider.publicKey } : await provider.connect();
-      setWallet(connected.publicKey.toBase58());
-
       setStage("signing");
       const built = await buildBurnAndProofTransaction({
-        owner: connected.publicKey,
+        owner: publicKey,
         mint,
         amountUi: amount,
         zcashAddress,
       });
-      const sent = await provider.signAndSendTransaction(built.transaction);
-      setResult({ solana: sent.signature });
+
+      const signature = await sendTransaction(
+        built.transaction,
+        new Connection(browserSolanaRpc(), "confirmed"),
+      );
+      setResult({ solana: signature });
 
       setStage("finalizing");
-      await waitForFinalized(sent.signature);
+      await waitForFinalized(signature);
 
       setStage("anchoring");
-      const json = await claimFromSignature(sent.signature);
+      const json = await claimFromSignature(signature);
       setStage("done");
       setMessage(
         json.nft?.status === "confirmed"
           ? "Zcash NFT confirmed."
-          : "Burn verified. Watching the Zcash NFT mint now…"
+          : "Burn verified. Watching the Zcash NFT mint now…",
       );
     } catch (error) {
       setStage("idle");
@@ -179,132 +189,45 @@ export function Launchpad({
     }
   }
 
-  async function publishLaunch(input: {
-    mint: string;
-    creationSignature: string;
-    creator: string;
-  }) {
-    const provider = getInjectedWallet();
-    if (!provider?.signMessage) {
-      throw new Error("Your Solana wallet must support message signing to publish a ZApp launch");
-    }
-    if (!launchName.trim() || !launchSymbol.trim()) throw new Error("Name and ticker are required");
-
-    const launchMessage = buildLaunchMessage({
-      mint: input.mint,
-      creationSignature: input.creationSignature,
-      name: launchName,
-      symbol: launchSymbol,
-      imageUrl: launchImage || null,
-      description: launchDescription || null,
-    });
-    const authorization = await provider.signMessage(new TextEncoder().encode(launchMessage));
-
-    const registration = await fetch("/api/assets", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        creationSignature: input.creationSignature,
-        mint: input.mint,
-        creator: input.creator,
-        registrationSignature: bytesToHex(authorization.signature),
-        name: launchName,
-        symbol: launchSymbol,
-        imageUrl: launchImage || null,
-        description: launchDescription || null,
-      }),
-    });
-    const json = await registration.json();
-    if (!registration.ok) throw new Error(json.error || "Launch registration failed");
-    return json;
-  }
-
-  async function createToken() {
-    setMessage("");
-    if (!publicLaunchEnabled) {
-      setMessage("ZApp is in preview mode. Token launches are locked until production readiness passes.");
-      return;
-    }
-    try {
-      if (!launchName.trim() || !launchSymbol.trim()) throw new Error("Name and ticker are required");
-      const provider = getInjectedWallet();
-      if (!provider) throw new Error("No injected Solana wallet found");
-      const connected = provider.publicKey ? { publicKey: provider.publicKey } : await provider.connect();
-      setWallet(connected.publicKey.toBase58());
-
-      const built = await buildFixedSupplyMintTransaction({
-        owner: connected.publicKey,
-        supplyUi: createSupply,
-        decimals: Number.parseInt(createDecimals, 10),
-      });
-      const sent = await provider.signAndSendTransaction(built.transaction);
-      await waitForFinalized(sent.signature);
-
-      await publishLaunch({
-        mint: built.mint,
-        creationSignature: sent.signature,
-        creator: connected.publicKey.toBase58(),
-      });
-
-      setCreatedMint(built.mint);
-      setMint(built.mint);
-      setMessage("Launch live. Mint authority is revoked and the asset is registered on ZApp.");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Token creation failed");
-    }
-  }
-
-  async function registerExistingToken() {
-    setMessage("");
-    if (!publicLaunchEnabled) {
-      setMessage("ZApp is in preview mode. Asset registration is locked until production readiness passes.");
-      return;
-    }
-    try {
-      if (!existingMint.trim() || !existingCreationSignature.trim()) {
-        throw new Error("Existing mint and its creation transaction are required");
-      }
-      const provider = getInjectedWallet();
-      if (!provider) throw new Error("No injected Solana wallet found");
-      const connected = provider.publicKey ? { publicKey: provider.publicKey } : await provider.connect();
-      setWallet(connected.publicKey.toBase58());
-
-      await publishLaunch({
-        mint: existingMint.trim(),
-        creationSignature: existingCreationSignature.trim(),
-        creator: connected.publicKey.toBase58(),
-      });
-      setMint(existingMint.trim());
-      setMessage("Existing fixed-supply asset registered. Its burn → Zcash NFT page is live.");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Existing asset registration failed");
-    }
-  }
-
   const buttonText =
-    stage === "signing" ? "Sign burn" :
-    stage === "finalizing" ? "Waiting for Solana finality" :
-    stage === "anchoring" ? "Creating Zcash claim" :
-    stage === "done" ? "NFT queued" :
-    "Burn & claim Zcash NFT";
+    stage === "signing"
+      ? "Approve burn"
+      : stage === "finalizing"
+        ? "Waiting for Solana finality"
+        : stage === "anchoring"
+          ? "Creating Zcash NFT"
+          : stage === "done"
+            ? "NFT queued"
+            : "Burn & claim Zcash NFT";
 
   return (
-    <section className="launchwrap shell">
+    <section className="launchwrap single shell">
       {!publicLaunchEnabled && (
         <div className="launchgate">
           <b>Preview mode</b>
-          <span>UI is live, but irreversible launch/burn actions remain locked until the production preflight passes.</span>
+          <span>
+            Irreversible burns remain locked until the production mainnet canary
+            passes.
+          </span>
         </div>
       )}
+
       <div className="launchcard">
         <div className="launch-top">
           <div>
-            <div className="eyebrow">ZAPP CLAIM</div>
-            <h2>{initialSymbol ? "Burn $" + initialSymbol + " → Zcash NFT" : "Burn → Zcash NFT"}</h2>
+            <div className="eyebrow">BURN → ZCASH</div>
+            <h2>
+              {initialSymbol
+                ? "Burn $" + initialSymbol + " → Zcash NFT"
+                : "Burn → Zcash NFT"}
+            </h2>
+            {wallet?.adapter?.name && (
+              <span className="connected-with">
+                Connected with {wallet.adapter.name}
+              </span>
+            )}
           </div>
-          <button className="wallet" onClick={() => connect().catch((e) => setMessage(e.message))}>
-            {wallet ? wallet.slice(0, 4) + "…" + wallet.slice(-4) : "Connect Solana"}
-          </button>
+          <ZAppWalletButton compact />
         </div>
 
         <label>
@@ -316,6 +239,7 @@ export function Launchpad({
             placeholder="Mint address"
           />
         </label>
+
         <label>
           <span>Amount to destroy</span>
           <input
@@ -325,20 +249,41 @@ export function Launchpad({
             inputMode="decimal"
           />
           {minimumBurnLabel && (
-            <small>Minimum for one Zcash NFT: {minimumBurnLabel} {initialSymbol ? "$" + initialSymbol : "tokens"}.</small>
+            <small>
+              Minimum for one Zcash NFT: {minimumBurnLabel}{" "}
+              {initialSymbol ? "$" + initialSymbol : "tokens"}.
+            </small>
           )}
         </label>
+
         <label>
           <span>Zcash NFT destination</span>
-          <input value={zcashAddress} onChange={(e) => setZcashAddress(e.target.value.trim())} placeholder="t1… or t3…" />
-          <small>The destination is committed inside the same Solana transaction as the burn.</small>
+          <input
+            value={zcashAddress}
+            onChange={(e) => setZcashAddress(e.target.value.trim())}
+            placeholder="t1… or t3…"
+          />
+          <small>
+            This address is committed inside the same Solana transaction as the
+            burn.
+          </small>
         </label>
 
-        <button className="primary" disabled={!publicLaunchEnabled || (stage !== "idle" && stage !== "done")} onClick={migrate}>
+        <button
+          className="primary"
+          disabled={
+            !publicLaunchEnabled ||
+            (stage !== "idle" && stage !== "done")
+          }
+          onClick={migrate}
+        >
           {buttonText}
         </button>
 
-        <div className="launch-divider"><span>already burned?</span></div>
+        <div className="launch-divider">
+          <span>already burned?</span>
+        </div>
+
         <label>
           <span>Recover finalized burn</span>
           <input
@@ -346,44 +291,54 @@ export function Launchpad({
             onChange={(e) => setRecoverySignature(e.target.value.trim())}
             placeholder="Solana transaction signature"
           />
-          <small>Anyone can re-submit a valid finalized ZApp burn. The NFT can only go to the Zcash address committed in that burn.</small>
+          <small>
+            Re-submitting cannot redirect the NFT. The original burn permanently
+            commits its Zcash destination.
+          </small>
         </label>
-        <button className="secondary" disabled={!publicLaunchEnabled || (stage !== "idle" && stage !== "done")} onClick={recoverBurn}>
+
+        <button
+          className="secondary"
+          disabled={
+            !publicLaunchEnabled ||
+            (stage !== "idle" && stage !== "done")
+          }
+          onClick={recoverBurn}
+        >
           Recover & queue NFT
         </button>
 
         {message && <div className="notice">{message}</div>}
+
         {(result.solana || result.zcash || result.burnId) && (
           <div className="resultbox">
-            {result.solana && <div><b>Solana burn</b><code>{result.solana}</code></div>}
-            {result.zcash && <div><b>Zcash proof tx</b><code>{result.zcash}</code></div>}
-            {result.burnId && <div><b>ZApp claim ID</b><code>{result.burnId}</code></div>}
-            {result.nft && <div><b>NFT</b><code>{result.nft}</code></div>}
+            {result.solana && (
+              <div>
+                <b>Solana burn</b>
+                <code>{result.solana}</code>
+              </div>
+            )}
+            {result.zcash && (
+              <div>
+                <b>Zcash inscription tx</b>
+                <code>{result.zcash}</code>
+              </div>
+            )}
+            {result.burnId && (
+              <div>
+                <b>ZApp claim ID</b>
+                <code>{result.burnId}</code>
+              </div>
+            )}
+            {result.nft && (
+              <div>
+                <b>NFT status</b>
+                <code>{result.nft}</code>
+              </div>
+            )}
           </div>
         )}
       </div>
-
-      {!hideCreator && (
-        <aside className="createcard">
-          <div className="eyebrow">LAUNCH AN ASSET</div>
-          <h3>Create the SPL side in one transaction</h3>
-          <p>ZApp mints the fixed supply to you and revokes mint authority before the launch can be listed.</p>
-          <label><span>Name</span><input value={launchName} onChange={(e) => setLaunchName(e.target.value)} placeholder="Zebra Coin" /></label>
-          <label><span>Ticker</span><input value={launchSymbol} onChange={(e) => setLaunchSymbol(e.target.value.toUpperCase())} placeholder="ZEBRA" /></label>
-          <label><span>Total supply</span><input value={createSupply} onChange={(e) => setCreateSupply(e.target.value)} inputMode="decimal" /></label>
-          <label><span>Decimals</span><input value={createDecimals} onChange={(e) => setCreateDecimals(e.target.value)} inputMode="numeric" /></label>
-          <label><span>Image URL</span><input value={launchImage} onChange={(e) => setLaunchImage(e.target.value)} placeholder="https://…" /></label>
-          <label><span>Description</span><input value={launchDescription} onChange={(e) => setLaunchDescription(e.target.value)} placeholder="What is this launch?" /></label>
-          <button className="secondary" disabled={!publicLaunchEnabled} onClick={createToken}>Create & launch</button>
-          {createdMint && <code className="mintcode">{createdMint}</code>}
-
-          <div className="launch-divider"><span>or onboard an existing asset</span></div>
-          <label><span>Existing SPL mint</span><input value={existingMint} onChange={(e) => setExistingMint(e.target.value.trim())} placeholder="Mint address" /></label>
-          <label><span>Mint creation transaction</span><input value={existingCreationSignature} onChange={(e) => setExistingCreationSignature(e.target.value.trim())} placeholder="Creation signature" /></label>
-          <button className="secondary" disabled={!publicLaunchEnabled} onClick={registerExistingToken}>Register existing asset</button>
-          <small>ZApp verifies the connected wallet created the mint and that mint authority is revoked before listing it.</small>
-        </aside>
-      )}
     </section>
   );
 }
