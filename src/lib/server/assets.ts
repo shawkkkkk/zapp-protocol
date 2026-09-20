@@ -48,6 +48,7 @@ export async function verifyLaunchRegistration(input: {
 }): Promise<{
   tokenProgram: string;
   decimals: number;
+  supplyBaseUnits: string;
   launchSlot: number;
 }> {
   const tx = await fetchFinalizedRawTransaction(input.creationSignature);
@@ -86,6 +87,7 @@ export async function verifyLaunchRegistration(input: {
   return {
     tokenProgram: tokenProgram.toBase58(),
     decimals: mintInfo.decimals,
+    supplyBaseUnits: mintInfo.supply.toString(),
     launchSlot: tx.slot,
   };
 }
