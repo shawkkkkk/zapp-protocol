@@ -2,7 +2,7 @@
 
 Railway is a practical fit for ZApp because the project needs a public Next.js service,
 a long-running NFT worker, and PostgreSQL. Railway maps those to separate services rather
-than running docker-compose directly. citeturn321249search1
+than running docker-compose directly.
 
 ## Services
 
@@ -64,7 +64,7 @@ ZAPP_NFT_REVEAL_FEE_ZATS=50000
 Keep this service private; it needs no public domain.
 
 Use an automatic restart policy for the worker. Railway services are long-running processes,
-and restart policies are designed for exactly this workload. citeturn797434search5
+and restart policies are designed for exactly this workload.
 
 ## Migrations
 
