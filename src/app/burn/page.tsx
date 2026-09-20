@@ -1,5 +1,4 @@
-import { AssetDiscovery } from "@/components/AssetDiscovery";
-import { Launchpad } from "@/components/Launchpad";
+import { BurnDesk } from "@/components/BurnDesk";
 
 export const dynamic = "force-dynamic";
 
@@ -20,23 +19,21 @@ export default function BurnPage() {
         <div className="eyebrow">SOLANA → ZCASH</div>
         <h1>Destroy on Solana.<br />Keep the proof on Zcash.</h1>
         <p>
-          Burn a registered ZApp asset and commit the destination in the same
-          transaction. ZApp independently verifies the burn before minting the
-          corresponding Zcash inscription/NFT.
+          Choose a registered asset, destroy tokens in your own wallet, and
+          commit the Zcash destination in the same transaction. ZApp verifies
+          both chains independently.
         </p>
       </header>
 
-      <Launchpad />
+      <BurnDesk />
 
-      <section className="section shell burn-register">
-        <div className="register-head">
-          <div>
-            <div className="eyebrow">REGISTERED ASSETS</div>
-            <h2>Choose something to burn</h2>
-          </div>
-          <a className="textlink" href="/leaderboard">Leaderboard →</a>
-        </div>
-        <AssetDiscovery />
+      <section className="minimal-disclosure shell">
+        <b>Burning is permanent.</b>
+        <p>
+          ZApp never takes custody of the tokens you destroy. Once your wallet
+          signs the Solana burn, the tokens cannot be restored or redirected.
+          The resulting Zcash proof records exactly what was destroyed.
+        </p>
       </section>
     </main>
   );
