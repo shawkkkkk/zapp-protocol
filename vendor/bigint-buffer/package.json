@@ -1,0 +1,11 @@
+{
+  "name": "bigint-buffer",
+  "version": "1.1.6-zapp.1",
+  "description": "Bounds-safe pure-JavaScript bigint/buffer conversion compatibility package for ZApp",
+  "main": "index.cjs",
+  "types": "index.d.ts",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=18"
+  }
+}
