@@ -33,6 +33,92 @@ const SIGNER_BIN =
   "native/zapp-zcash-signer/target/release/zapp-zcash-signer";
 
 
+
+type RelayHealth = {
+  ok: boolean;
+  detail: string;
+  metadata: {
+    relayOk: boolean;
+    chain?: string;
+    blocks?: number;
+    headers?: number;
+    verificationProgress?: number;
+    signerOk?: boolean;
+    balanceZec?: number;
+    minimumBalanceZec?: number;
+  };
+};
+
+async function probeRelayHealth(): Promise<RelayHealth> {
+  try {
+    const rpc = new ZcashRpc();
+    const chain = await rpc.call<{
+      chain?: string;
+      blocks?: number;
+      headers?: number;
+      verificationprogress?: number;
+    }>("getblockchaininfo");
+    const blocks = chain.blocks ?? 0;
+    const headers = chain.headers ?? blocks;
+    const progress = chain.verificationprogress ?? 0;
+    const lag = Math.max(0, headers - blocks);
+
+    const address = process.env.ZAPP_NFT_SIGNER_TADDR;
+    let signerOk = false;
+    if (address) {
+      const info = await rpc.call<{
+        isvalid: boolean;
+        ismine?: boolean;
+        isscript?: boolean;
+        pubkey?: string;
+      }>("validateaddress", [address]);
+      signerOk = Boolean(
+        info.isvalid &&
+          info.ismine &&
+          !info.isscript &&
+          info.pubkey &&
+          /^[0-9a-f]{66}$/i.test(info.pubkey),
+      );
+    }
+
+    const balance = await rpc.call<number>("getbalance");
+    const minimum = Number(process.env.ZAPP_MIN_RELAY_BALANCE_ZEC || "0.01");
+    const ok =
+      chain.chain === "main" &&
+      lag <= 2 &&
+      progress >= 0.999 &&
+      signerOk &&
+      Number.isFinite(balance) &&
+      balance >= minimum;
+
+    return {
+      ok,
+      detail: ok
+        ? "mainnet relay synced, signer owned, balance sufficient"
+        : "Zcash relay prerequisites are incomplete",
+      metadata: {
+        relayOk: ok,
+        chain: chain.chain,
+        blocks,
+        headers,
+        verificationProgress: progress,
+        signerOk,
+        balanceZec: balance,
+        minimumBalanceZec: minimum,
+      },
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      detail:
+        error instanceof Error
+          ? "Zcash relay unavailable: " + error.message.slice(0, 240)
+          : "Zcash relay unavailable",
+      metadata: { relayOk: false },
+    };
+  }
+}
+
 async function selfTestSigner(): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const child = spawn(SIGNER_BIN, ["--self-test"], { stdio: ["ignore", "pipe", "pipe"] });
@@ -395,37 +481,73 @@ async function processOne(): Promise<boolean> {
 
 async function main() {
   await selfTestSigner();
-  await heartbeatService("nft-worker", "ready", "signer self-test passed");
-  console.log("ZApp NFT worker ready: signer self-test passed, queue polling active");
+  await heartbeatService("nft-worker", "starting", "signer self-test passed");
+  console.log("ZApp NFT worker signer self-test passed");
   let lastLogAt = Date.now();
+  let lastRelayProbeAt = 0;
+  let relayHealth: RelayHealth | null = null;
   const watch = process.argv.includes("--watch");
+
   do {
     try {
       if (process.env.ZAPP_NFT_MINT_ENABLED === "false") {
-        await heartbeatService("nft-worker", "paused", "NFT mint kill switch is off");
+        await heartbeatService(
+          "nft-worker",
+          "paused",
+          "NFT mint kill switch is off",
+          { relayOk: false },
+        );
+        if (!watch) break;
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        continue;
+      }
+
+      if (!relayHealth || Date.now() - lastRelayProbeAt >= 15_000) {
+        relayHealth = await probeRelayHealth();
+        lastRelayProbeAt = Date.now();
+      }
+
+      if (!relayHealth.ok) {
+        await heartbeatService(
+          "nft-worker",
+          "waiting",
+          relayHealth.detail,
+          relayHealth.metadata,
+        );
+        if (Date.now() - lastLogAt >= 30_000) {
+          console.log("ZApp NFT worker waiting: " + relayHealth.detail);
+          lastLogAt = Date.now();
+        }
         if (!watch) break;
         await new Promise((resolve) => setTimeout(resolve, 3000));
         continue;
       }
 
       const worked = await processOne();
-      await heartbeatService("nft-worker", "ready", worked ? "processed queue item" : "idle");
+      await heartbeatService(
+        "nft-worker",
+        "ready",
+        worked ? "processed queue item" : "queue idle",
+        relayHealth.metadata,
+      );
       if (worked) {
         console.log("ZApp NFT worker processed a queue item");
         lastLogAt = Date.now();
       } else if (Date.now() - lastLogAt >= 30_000) {
-        console.log("ZApp NFT worker heartbeat: ready, queue idle");
+        console.log("ZApp NFT worker heartbeat: relay ready, queue idle");
         lastLogAt = Date.now();
       }
       if (!watch) break;
       if (!worked) await new Promise((resolve) => setTimeout(resolve, 3000));
     } catch (error) {
       console.error(error);
+      relayHealth = null;
       try {
         await heartbeatService(
           "nft-worker",
           "error",
           error instanceof Error ? error.message.slice(0, 500) : "worker error",
+          { relayOk: false },
         );
       } catch {}
       if (!watch) throw error;
