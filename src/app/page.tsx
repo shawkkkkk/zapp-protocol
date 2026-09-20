@@ -10,6 +10,7 @@ export default function Home() {
         <div className="navlinks">
           <a href="#launch">Launch</a>
           <a href="#register">Register</a>
+          <a href="/leaderboard">Leaderboard</a>
           <a href="/explorer">Explorer</a>
           <a
             href="https://github.com/shawkkkkk/zapp-protocol"
