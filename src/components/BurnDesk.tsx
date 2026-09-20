@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Connection } from "@solana/web3.js";
+import {
+  TOKEN_2022_PROGRAM_ID,
+  TOKEN_PROGRAM_ID,
+} from "@solana/spl-token";
+import { useUnifiedWallet } from "@jup-ag/wallet-adapter";
 import { Launchpad } from "@/components/Launchpad";
+import { browserSolanaRpc } from "@/lib/client/solana";
 
 type Asset = {
   mint: string;
@@ -31,7 +38,10 @@ function shortMint(mint: string) {
 }
 
 export function BurnDesk() {
+  const { publicKey } = useUnifiedWallet();
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [balances, setBalances] = useState<Record<string, string>>({});
+  const [balancesLoading, setBalancesLoading] = useState(false);
   const [selected, setSelected] = useState<Asset | null>(null);
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
@@ -50,24 +60,100 @@ export function BurnDesk() {
       );
   }, []);
 
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!publicKey) {
+      setBalances({});
+      return;
+    }
+
+    setBalancesLoading(true);
+    const connection = new Connection(browserSolanaRpc(), "confirmed");
+
+    Promise.all([
+      connection.getParsedTokenAccountsByOwner(publicKey, {
+        programId: TOKEN_PROGRAM_ID,
+      }),
+      connection.getParsedTokenAccountsByOwner(publicKey, {
+        programId: TOKEN_2022_PROGRAM_ID,
+      }),
+    ])
+      .then(([classic, token2022]) => {
+        if (cancelled) return;
+        const next: Record<string, bigint> = {};
+
+        for (const account of [...classic.value, ...token2022.value]) {
+          const info = account.account.data.parsed?.info as
+            | {
+                mint?: string;
+                tokenAmount?: { amount?: string };
+              }
+            | undefined;
+          const mint = info?.mint;
+          const raw = info?.tokenAmount?.amount;
+          if (!mint || !raw || !/^\d+$/.test(raw)) continue;
+          next[mint] = (next[mint] || 0n) + BigInt(raw);
+        }
+
+        setBalances(
+          Object.fromEntries(
+            Object.entries(next).map(([mint, value]) => [
+              mint,
+              value.toString(),
+            ]),
+          ),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setBalances({});
+      })
+      .finally(() => {
+        if (!cancelled) setBalancesLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [publicKey]);
+
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    if (!needle) return assets.slice(0, 12);
-    return assets
-      .filter(
-        (asset) =>
-          asset.name.toLowerCase().includes(needle) ||
-          asset.symbol.toLowerCase().includes(needle) ||
-          asset.mint.toLowerCase().includes(needle),
-      )
-      .slice(0, 20);
-  }, [assets, query]);
+    const matching = assets.filter(
+      (asset) =>
+        !needle ||
+        asset.name.toLowerCase().includes(needle) ||
+        asset.symbol.toLowerCase().includes(needle) ||
+        asset.mint.toLowerCase().includes(needle),
+    );
+
+    return matching
+      .sort((a, b) => {
+        const aHeld = BigInt(balances[a.mint] || "0") > 0n ? 1 : 0;
+        const bHeld = BigInt(balances[b.mint] || "0") > 0n ? 1 : 0;
+        return bHeld - aHeld;
+      })
+      .slice(0, needle ? 20 : 12);
+  }, [assets, balances, query]);
 
   return (
     <section className="burn-desk shell">
       <div className="burn-picker">
         <div className="eyebrow">1 · CHOOSE ASSET</div>
         <h2>What are you destroying?</h2>
+
+        {publicKey && (
+          <div className="burn-wallet-hint">
+            {balancesLoading
+              ? "Reading your registered ZApp balances…"
+              : Object.keys(balances).some(
+                  (mint) => BigInt(balances[mint] || "0") > 0n &&
+                    assets.some((asset) => asset.mint === mint),
+                )
+                ? "Assets you hold are shown first."
+                : "No registered ZApp asset balance found in this wallet."}
+          </div>
+        )}
 
         <input
           className="burn-search"
@@ -104,6 +190,15 @@ export function BurnDesk() {
                 <code>{shortMint(asset.mint)}</code>
               </div>
               <div className="burn-asset-stats">
+                {BigInt(balances[asset.mint] || "0") > 0n && (
+                  <span className="wallet-balance">
+                    You hold{" "}
+                    {formatBaseUnits(
+                      balances[asset.mint],
+                      asset.decimals,
+                    )}
+                  </span>
+                )}
                 <span>{asset.verified_burns} burns</span>
                 <span>{asset.confirmed_nfts} Zcash</span>
               </div>
