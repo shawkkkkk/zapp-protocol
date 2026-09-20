@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listAssetsForDiscovery, upsertAsset, type AssetDiscoverySort } from "@/lib/server/db";
+import { enforceRateLimit, RateLimitError, rateLimitResponse } from "@/lib/server/rate-limit";
 import {
   sanitizePublicUrl,
   verifyLaunchAuthorization,
@@ -41,6 +42,12 @@ export async function POST(request: NextRequest) {
     const body = await request.json() as Record<string, unknown>;
     const mint = cleanText(body.mint, "mint", 64);
     const creator = cleanText(body.creator, "creator", 64);
+    await enforceRateLimit(request, {
+      namespace: "asset-register",
+      limit: 12,
+      windowSeconds: 3600,
+      identity: creator,
+    });
     const creationSignature = cleanText(body.creationSignature, "creationSignature", 128);
     const registrationSignature = cleanText(body.registrationSignature, "registrationSignature", 128);
     const name = cleanText(body.name, "name", 48);
@@ -88,6 +95,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ asset }, { status: 201 });
   } catch (error) {
+    if (error instanceof RateLimitError) return rateLimitResponse(error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Asset registration failed" },
       { status: 400 },
