@@ -1,3 +1,7 @@
+ALTER TABLE claims DROP CONSTRAINT IF EXISTS claims_status_check;
+ALTER TABLE claims ADD CONSTRAINT claims_status_check
+  CHECK (status IN ('reserved','relaying','broadcast','confirmed','failed','invalidated'));
+
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS current_owner TEXT;
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS owner_txid TEXT;
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS owner_vout INTEGER;
