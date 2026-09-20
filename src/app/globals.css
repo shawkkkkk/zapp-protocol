@@ -209,3 +209,11 @@ th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spa
   flex: 1;
   background: var(--line);
 }
+
+.hero-disclosure {
+  max-width: 720px;
+  margin-top: 18px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
