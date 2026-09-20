@@ -479,3 +479,27 @@ export async function updateNftMint(
     ],
   );
 }
+
+export type PublicNftRow = NftMintRow & {
+  mint: string;
+  amount_base_units: string;
+  recipient: string;
+  current_owner: string | null;
+  symbol: string | null;
+  name: string | null;
+};
+
+export async function listNftMints(limit = 50): Promise<PublicNftRow[]> {
+  const safeLimit = Math.max(1, Math.min(limit, 200));
+  const result = await database().query<PublicNftRow>(
+    `SELECT n.*, c.mint, c.amount_base_units, c.recipient, c.current_owner,
+            a.symbol, a.name
+     FROM nft_mints n
+     JOIN claims c ON c.burn_id=n.burn_id
+     LEFT JOIN assets a ON a.mint=c.mint
+     ORDER BY n.created_at DESC
+     LIMIT $1`,
+    [safeLimit],
+  );
+  return result.rows;
+}
