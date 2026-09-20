@@ -774,3 +774,35 @@ export async function listAssetsForDiscovery(
   );
   return result.rows;
 }
+
+
+export type LaunchImageRow = {
+  sha256: string;
+  content_type: string;
+  byte_size: number;
+  data: Buffer;
+  creator: string;
+  created_at: string;
+};
+
+export async function putLaunchImage(input: {
+  sha256: string;
+  contentType: string;
+  data: Buffer;
+  creator: string;
+}): Promise<void> {
+  await database().query(
+    `INSERT INTO launch_images (sha256, content_type, byte_size, data, creator)
+     VALUES ($1,$2,$3,$4,$5)
+     ON CONFLICT (sha256) DO NOTHING`,
+    [input.sha256, input.contentType, input.data.byteLength, input.data, input.creator],
+  );
+}
+
+export async function getLaunchImage(sha256: string): Promise<LaunchImageRow | null> {
+  const result = await database().query<LaunchImageRow>(
+    "SELECT * FROM launch_images WHERE sha256=$1",
+    [sha256],
+  );
+  return result.rows[0] || null;
+}
