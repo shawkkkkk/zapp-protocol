@@ -11,11 +11,19 @@ import type { BurnEvidence } from "../validation.ts";
 type RpcError = { code?: number; message?: string };
 
 export class ZcashRpc {
+  private readonly url: string;
+  private readonly user: string | undefined;
+  private readonly password: string | undefined;
+
   constructor(
-    private readonly url = process.env.ZCASH_RPC_URL || "http://127.0.0.1:8232",
-    private readonly user = process.env.ZCASH_RPC_USER,
-    private readonly password = process.env.ZCASH_RPC_PASSWORD,
-  ) {}
+    url = process.env.ZCASH_RPC_URL || "http://127.0.0.1:8232",
+    user = process.env.ZCASH_RPC_USER,
+    password = process.env.ZCASH_RPC_PASSWORD,
+  ) {
+    this.url = url;
+    this.user = user;
+    this.password = password;
+  }
 
   async call<T>(method: string, params: unknown[] = []): Promise<T> {
     if (!this.user || !this.password) throw new Error("Zcash RPC credentials are not configured");
