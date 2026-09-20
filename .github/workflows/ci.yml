@@ -20,4 +20,4 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - name: Check inscription signer
-        run: cargo check --locked --manifest-path native/zapp-zcash-signer/Cargo.toml
+        run: cargo check --manifest-path native/zapp-zcash-signer/Cargo.toml
