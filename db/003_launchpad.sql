@@ -25,7 +25,9 @@ CREATE TABLE IF NOT EXISTS nft_mints (
   content_sha256 TEXT NOT NULL,
   commit_txid TEXT,
   commit_vout INTEGER,
+  commit_raw_hex TEXT,
   reveal_txid TEXT UNIQUE,
+  reveal_raw_hex TEXT,
   inscription_id TEXT UNIQUE,
   attempts INTEGER NOT NULL DEFAULT 0,
   error TEXT,
@@ -34,3 +36,6 @@ CREATE TABLE IF NOT EXISTS nft_mints (
 );
 
 CREATE INDEX IF NOT EXISTS nft_mints_status_idx ON nft_mints(status, updated_at);
+
+ALTER TABLE nft_mints ADD COLUMN IF NOT EXISTS commit_raw_hex TEXT;
+ALTER TABLE nft_mints ADD COLUMN IF NOT EXISTS reveal_raw_hex TEXT;
