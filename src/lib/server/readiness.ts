@@ -1,5 +1,4 @@
 import { database, getNftQueueStats, getServiceHealth } from "./db.ts";
-import { ZcashRpc } from "./zcash.ts";
 
 export const SOLANA_MAINNET_GENESIS_HASH =
   "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d";
@@ -222,52 +221,79 @@ export async function readinessChecks(): Promise<ReadinessCheck[]> {
   }
 
   try {
-    const rpc = new ZcashRpc();
-    const chain = await rpc.call<{
-      chain?: string;
-      blocks?: number;
-      headers?: number;
-      verificationprogress?: number;
-    }>("getblockchaininfo");
-    const blocks = chain.blocks ?? 0;
-    const headers = chain.headers ?? blocks;
-    const lag = Math.max(0, headers - blocks);
-    const progress = chain.verificationprogress ?? 1;
-    const ok = chain.chain === "main" && lag <= 2 && progress >= 0.999;
+    const health = await getServiceHealth("nft-worker");
+    const metadata = health?.metadata || {};
+    const chain = typeof metadata.chain === "string" ? metadata.chain : undefined;
+    const blocks = typeof metadata.blocks === "number" ? metadata.blocks : undefined;
+    const headers = typeof metadata.headers === "number" ? metadata.headers : undefined;
+    const progress =
+      typeof metadata.verificationProgress === "number"
+        ? metadata.verificationProgress
+        : undefined;
+    const signerOk = metadata.signerOk === true;
+    const balance =
+      typeof metadata.balanceZec === "number" ? metadata.balanceZec : undefined;
+    const minimum =
+      typeof metadata.minimumBalanceZec === "number"
+        ? metadata.minimumBalanceZec
+        : Number(process.env.ZAPP_MIN_RELAY_BALANCE_ZEC || "0.01");
+    const relayOk = metadata.relayOk === true;
+
     checks.push({
-      ok,
+      ok:
+        relayOk &&
+        chain === "main" &&
+        blocks !== undefined &&
+        headers !== undefined &&
+        Math.max(0, headers - blocks) <= 2 &&
+        (progress ?? 0) >= 0.999,
       name: "zcash-mainnet",
-      detail: ok
-        ? "mainnet node synced at height " + blocks
-        : `chain=${chain.chain || "unknown"} blocks=${blocks} headers=${headers} progress=${progress}`,
+      detail:
+        relayOk && chain === "main" && blocks !== undefined
+          ? "private worker reports synced Zcash mainnet at height " + blocks
+          : "private worker has not reported a synced Zcash mainnet relay",
     });
 
-    const signer = process.env.ZAPP_NFT_SIGNER_TADDR;
-    if (!signer) {
-      checks.push({ ok: false, name: "zcash-signer-wallet", detail: "ZAPP_NFT_SIGNER_TADDR is missing" });
-    } else {
-      const address = await rpc.call<{ isvalid: boolean; ismine?: boolean; isscript?: boolean; pubkey?: string }>(
-        "validateaddress",
-        [signer],
-      );
-      checks.push({
-        ok: Boolean(address.isvalid && address.ismine && !address.isscript && address.pubkey),
-        name: "zcash-signer-wallet",
-        detail: address.isvalid && address.ismine && !address.isscript && address.pubkey
-          ? "wallet owns the compressed reveal signer"
-          : "configured reveal signer is not a spendable wallet-owned t1 key",
-      });
-    }
-
-    const balance = await rpc.call<number>("getbalance");
-    const minimum = Number(process.env.ZAPP_MIN_RELAY_BALANCE_ZEC || "0.01");
     checks.push({
-      ok: Number.isFinite(balance) && balance >= minimum,
+      ok: relayOk && signerOk,
+      name: "zcash-signer-wallet",
+      detail:
+        relayOk && signerOk
+          ? "private worker validated the wallet-owned compressed reveal signer"
+          : "private worker has not validated the reveal signer",
+    });
+
+    checks.push({
+      ok:
+        relayOk &&
+        balance !== undefined &&
+        Number.isFinite(balance) &&
+        balance >= minimum,
       name: "zcash-relay-balance",
-      detail: `${balance} ZEC available; minimum ${minimum} ZEC`,
+      detail:
+        balance !== undefined
+          ? balance + " ZEC available; minimum " + minimum + " ZEC"
+          : "private worker has not reported relay balance",
     });
   } catch (error) {
-    checks.push({ ok: false, name: "zcash-rpc", detail: error instanceof Error ? error.message : "Zcash RPC unavailable" });
+    checks.push({
+      ok: false,
+      name: "zcash-mainnet",
+      detail:
+        error instanceof Error
+          ? "private worker relay health unavailable: " + error.message
+          : "private worker relay health unavailable",
+    });
+    checks.push({
+      ok: false,
+      name: "zcash-signer-wallet",
+      detail: "private worker relay health unavailable",
+    });
+    checks.push({
+      ok: false,
+      name: "zcash-relay-balance",
+      detail: "private worker relay health unavailable",
+    });
   }
 
   try {
