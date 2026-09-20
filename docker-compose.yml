@@ -1,6 +1,7 @@
 services:
   postgres:
     image: postgres:17-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: zapp
       POSTGRES_PASSWORD: zapp
@@ -9,6 +10,64 @@ services:
       - "5432:5432"
     volumes:
       - zapp-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zapp -d zapp"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    image: postgres:17-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: zapp
+    volumes:
+      - ./db:/db:ro
+    command:
+      - sh
+      - -ec
+      - |
+        for file in /db/*.sql; do
+          echo "applying $file"
+          psql -h postgres -U zapp -d zapp -v ON_ERROR_STOP=1 -f "$file"
+        done
+    restart: "no"
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgres://zapp:zapp@postgres:5432/zapp
+      ZCASH_RPC_URL: ${ZCASH_DOCKER_RPC_URL:-http://host.docker.internal:8232}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "3000:3000"
+
+  nft-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgres://zapp:zapp@postgres:5432/zapp
+      ZCASH_RPC_URL: ${ZCASH_DOCKER_RPC_URL:-http://host.docker.internal:8232}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 volumes:
   zapp-postgres:
