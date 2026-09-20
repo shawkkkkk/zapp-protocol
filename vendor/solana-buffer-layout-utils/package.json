@@ -1,0 +1,23 @@
+{
+  "name": "@solana/buffer-layout-utils",
+  "version": "0.3.0",
+  "description": "ZApp-maintained bounds-safe compatibility implementation for SPL Token",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./index.cjs",
+  "module": "./index.mjs",
+  "types": "./index.d.ts",
+  "exports": {
+    "import": "./index.mjs",
+    "require": "./index.cjs",
+    "types": "./index.d.ts"
+  },
+  "dependencies": {
+    "@solana/buffer-layout": "^4.0.0",
+    "@solana/web3.js": "^1.95.5",
+    "bignumber.js": "^9.0.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
