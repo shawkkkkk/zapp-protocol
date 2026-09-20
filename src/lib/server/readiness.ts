@@ -29,6 +29,19 @@ async function solanaRpc<T>(method: string, params: unknown[] = []): Promise<T> 
 export async function readinessChecks(): Promise<ReadinessCheck[]> {
   const checks: ReadinessCheck[] = [];
 
+  const publicGate = process.env.ZAPP_PUBLIC_LAUNCH_ENABLED === "true";
+  const canaryAccess = process.env.ZAPP_CANARY_ENABLED === "true";
+  checks.push({
+    ok: !publicGate || !canaryAccess,
+    name: "canary-access",
+    detail:
+      publicGate && canaryAccess
+        ? "disable private canary access before opening public launch"
+        : canaryAccess
+          ? "private canary access enabled while public gate is locked"
+          : "private canary access disabled",
+  });
+
   try {
     const db = database();
     const schema = await db.query<{
