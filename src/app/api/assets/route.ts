@@ -88,6 +88,8 @@ export async function POST(request: NextRequest) {
       websiteUrl,
       xUrl,
       minBurnBaseUnits,
+      creationSignature,
+      registrationSignature,
       tokenProgram: verified.tokenProgram,
       decimals: verified.decimals,
       launchSlot: verified.launchSlot,
