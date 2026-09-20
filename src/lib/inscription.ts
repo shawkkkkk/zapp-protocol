@@ -132,3 +132,50 @@ export function inscriptionDescriptor(input: {
     pieces: splitInscriptionContent(input.content).length,
   };
 }
+
+
+function compactSizeLength(n: number): number {
+  if (!Number.isSafeInteger(n) || n < 0) throw new Error("Invalid CompactSize length");
+  if (n < 253) return 1;
+  if (n <= 0xffff) return 3;
+  if (n <= 0xffffffff) return 5;
+  return 9;
+}
+
+/**
+ * ZIP-317 conventional fee estimate for ZApp's single-input transparent reveal.
+ * Uses a 73-byte worst-case DER+sighash signature, so the estimate cannot
+ * underpay because a real ECDSA signature serialized one or two bytes shorter.
+ */
+export function estimateRevealZip317FeeZats(input: {
+  content: Uint8Array;
+  redeemScriptHex: string;
+  proofScriptHex: string;
+  contentType?: string;
+}): bigint {
+  const redeemScript = hexToBytes(input.redeemScriptHex);
+  const proofScript = hexToBytes(input.proofScriptHex);
+  const dummySignature = new Uint8Array(73);
+  const scriptSig = buildRevealScriptSig({
+    content: input.content,
+    signatureWithHashType: dummySignature,
+    redeemScript,
+    contentType: input.contentType,
+  });
+
+  // ZIP-317 transparent contribution uses serialized tx_in / tx_out field sizes.
+  const inputBytes = 36 + compactSizeLength(scriptSig.length) + scriptSig.length + 4;
+
+  // output 0 is a standard P2PKH t1 output: 8 value + 1 script len + 25 script.
+  const recipientOutputBytes = 34;
+  // output 1 is the compact ZApp OP_RETURN carrier.
+  const proofOutputBytes =
+    8 + compactSizeLength(proofScript.length) + proofScript.length;
+  const outputBytes = recipientOutputBytes + proofOutputBytes;
+
+  const inputActions = Math.ceil(inputBytes / 150);
+  const outputActions = Math.ceil(outputBytes / 34);
+  const logicalActions = Math.max(inputActions, outputActions);
+  const chargedActions = Math.max(2, logicalActions);
+  return BigInt(chargedActions) * 5000n;
+}
