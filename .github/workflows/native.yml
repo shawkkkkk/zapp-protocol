@@ -1,0 +1,24 @@
+name: Native signer
+on:
+  push:
+    branches: [main]
+    paths:
+      - "native/zapp-zcash-signer/**"
+      - ".github/workflows/native.yml"
+  pull_request:
+    paths:
+      - "native/zapp-zcash-signer/**"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.88
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native/zapp-zcash-signer
+      - run: cargo check --manifest-path native/zapp-zcash-signer/Cargo.toml
