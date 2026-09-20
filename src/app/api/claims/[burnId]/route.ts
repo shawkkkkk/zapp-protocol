@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getClaim } from "@/lib/server/db";
+import { getClaim, getNftMint } from "@/lib/server/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,6 +15,8 @@ export async function GET(
     }
     const row = await getClaim(burnId.toLowerCase());
     if (!row) return NextResponse.json({ error: "Proof not found" }, { status: 404 });
+
+    const nft = await getNftMint(burnId.toLowerCase());
 
     return NextResponse.json({
       claim: {
@@ -35,8 +37,17 @@ export async function GET(
         ownerTxid: row.owner_txid,
         ownerVout: row.owner_vout,
         status: row.status,
+        ownershipState: row.ownership_state,
         createdAt: row.created_at,
       },
+      nft: nft ? {
+        status: nft.status,
+        commitTxid: nft.commit_txid,
+        revealTxid: nft.reveal_txid,
+        inscriptionId: nft.inscription_id,
+        contentSha256: nft.content_sha256,
+        error: nft.status === "failed" ? nft.error : null,
+      } : null,
     });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to load proof" }, { status: 500 });
