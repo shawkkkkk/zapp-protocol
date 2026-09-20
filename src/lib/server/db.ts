@@ -118,7 +118,12 @@ export async function markClaimBroadcast(input: {
 }): Promise<void> {
   await database().query(
     `UPDATE claims
-     SET status='broadcast', zcash_txid=$2, recipient_vout=$3, carrier_vout=$4, error=NULL, updated_at=NOW()
+     SET status=CASE WHEN status='confirmed' THEN 'confirmed' ELSE 'broadcast' END,
+         zcash_txid=COALESCE(zcash_txid,$2),
+         recipient_vout=COALESCE(recipient_vout,$3),
+         carrier_vout=COALESCE(carrier_vout,$4),
+         error=NULL,
+         updated_at=NOW()
      WHERE burn_id=$1`,
     [input.burnId, input.txid, input.recipientVout, input.carrierVout],
   );
@@ -126,7 +131,10 @@ export async function markClaimBroadcast(input: {
 
 export async function markClaimFailed(burnId: string, error: string): Promise<void> {
   await database().query(
-    "UPDATE claims SET status='failed', error=$2, updated_at=NOW() WHERE burn_id=$1",
+    `UPDATE claims
+     SET status='failed', error=$2, updated_at=NOW()
+     WHERE burn_id=$1
+       AND status NOT IN ('broadcast','confirmed')`,
     [burnId, error.slice(0, 2000)],
   );
 }
