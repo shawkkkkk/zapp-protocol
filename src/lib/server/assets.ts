@@ -79,6 +79,9 @@ export async function verifyLaunchRegistration(input: {
   if (mintInfo.mintAuthority !== null) {
     throw new Error("Public ZApp launches require revoked mint authority");
   }
+  if (mintInfo.freezeAuthority !== null) {
+    throw new Error("Public ZApp launches require revoked freeze authority");
+  }
 
   return {
     tokenProgram: tokenProgram.toBase58(),
@@ -90,8 +93,16 @@ export async function verifyLaunchRegistration(input: {
 export function sanitizePublicUrl(value: unknown): string | null {
   if (value === undefined || value === null || value === "") return null;
   if (typeof value !== "string") throw new Error("URL fields must be strings");
-  const url = new URL(value.trim());
-  if (!["https:", "http:"].includes(url.protocol)) throw new Error("Only http(s) URLs are allowed");
+  const trimmed = value.trim();
+
+  if (/^\/api\/images\/[a-f0-9]{64}$/i.test(trimmed)) {
+    return trimmed.toLowerCase();
+  }
+
+  const url = new URL(trimmed);
+  if (!["https:", "http:"].includes(url.protocol)) {
+    throw new Error("Only http(s) URLs or ZApp-hosted images are allowed");
+  }
   return url.toString();
 }
 
