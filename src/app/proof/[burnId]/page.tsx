@@ -38,10 +38,31 @@ export async function generateMetadata({
   );
   const symbol = asset?.symbol ? " $" + asset.symbol : "";
 
+  const origin =
+    process.env.ZAPP_CANONICAL_ORIGIN ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    "https://zapp-web-production.up.railway.app";
+  const url = origin.replace(/\/$/, "") + "/proof/" + claim.burn_id;
+  const title = `${amount}${symbol} destroyed — ZApp Proof`;
+  const description =
+    `${amount}${symbol} was destroyed on Solana and recorded on Zcash through ZApp.`;
+
   return {
-    title: `${amount}${symbol} destroyed — ZApp Proof`,
-    description:
-      `${amount}${symbol} was destroyed on Solana and recorded on Zcash through ZApp.`,
+    title,
+    description,
+    alternates: { canonical: url },
+    openGraph: {
+      title,
+      description,
+      url,
+      siteName: "ZApp",
+      type: "website",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+    },
   };
 }
 
