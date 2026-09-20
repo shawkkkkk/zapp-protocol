@@ -6,13 +6,14 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    if (process.env.DATABASE_URL) {
-      await database().query("SELECT 1");
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not configured");
     }
+    await database().query("SELECT 1");
     return NextResponse.json({
       ok: true,
       service: "zapp-web",
-      database: Boolean(process.env.DATABASE_URL),
+      database: true,
       publicLaunchEnabled: process.env.ZAPP_PUBLIC_LAUNCH_ENABLED === "true",
     });
   } catch (error) {
