@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listAssetsForDiscovery, upsertAsset, type AssetDiscoverySort } from "@/lib/server/db";
+import {
+  ensureAssetWatchCursor,
+  listAssetsForDiscovery,
+  upsertAsset,
+  type AssetDiscoverySort,
+} from "@/lib/server/db";
 import { enforceRateLimit, RateLimitError, rateLimitResponse } from "@/lib/server/rate-limit";
+import { getFinalizedSolanaSlot } from "@/lib/server/solana-raw";
 import {
   sanitizePublicUrl,
   verifyLaunchAuthorization,
@@ -82,6 +88,7 @@ export async function POST(request: NextRequest) {
       xUrl,
       minBurnBaseUnits,
     });
+    const watchStartSlot = await getFinalizedSolanaSlot();
     const verified = await verifyLaunchRegistration({ creationSignature, mint, creator });
     const asset = await upsertAsset({
       mint,
