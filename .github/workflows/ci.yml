@@ -23,3 +23,7 @@ jobs:
         run: cargo check --manifest-path native/zapp-zcash-signer/Cargo.toml
       - name: Self-test inscription signer
         run: cargo run --quiet --manifest-path native/zapp-zcash-signer/Cargo.toml -- --self-test
+      - name: Validate production compose stack
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
