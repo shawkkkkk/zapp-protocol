@@ -15,6 +15,9 @@ test("launch metadata requires the creator wallet signature", () => {
     symbol: "ZEBRA",
     imageUrl: "https://example.com/zebra.png",
     description: "test launch",
+    websiteUrl: "https://example.com/",
+    xUrl: "https://x.com/example",
+    minBurnBaseUnits: "1000000",
   };
   const message = new TextEncoder().encode(buildLaunchMessage(input));
   const signature = nacl.sign.detached(message, keypair.secretKey);
@@ -31,6 +34,15 @@ test("launch metadata requires the creator wallet signature", () => {
     verifyLaunchAuthorization({
       ...input,
       name: "Hijacked",
+      creator,
+      registrationSignature: bytesToHex(signature),
+    }),
+  );
+
+  assert.throws(() =>
+    verifyLaunchAuthorization({
+      ...input,
+      minBurnBaseUnits: "1",
       creator,
       registrationSignature: bytesToHex(signature),
     }),
