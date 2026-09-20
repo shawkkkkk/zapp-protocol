@@ -42,7 +42,7 @@ async function waitForFinalized(signature: string): Promise<void> {
 
 export function LaunchCreator() {
   const [mode, setMode] = useState<Mode>("new");
-  const { publicKey, sendTransaction, signMessage, wallet } = useUnifiedWallet();
+  const { publicKey, sendTransaction, signMessage } = useUnifiedWallet();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -230,7 +230,7 @@ export function LaunchCreator() {
             <div className="eyebrow">CREATE A ZAPP LAUNCH</div>
             <h2>Launch a coin</h2>
           </div>
-          <ZAppWalletButton compact />
+          <ZAppWalletButton />
         </div>
 
         {!publicLaunchEnabled && (
