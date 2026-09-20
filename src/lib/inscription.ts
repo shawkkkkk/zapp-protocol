@@ -179,3 +179,167 @@ export function estimateRevealZip317FeeZats(input: {
   const chargedActions = Math.max(2, logicalActions);
   return BigInt(chargedActions) * 5000n;
 }
+
+
+type ParsedScriptItem =
+  | { kind: "data"; data: Uint8Array }
+  | { kind: "num"; value: number };
+
+function parsePushOnlyScript(scriptBytes: Uint8Array): ParsedScriptItem[] | null {
+  const items: ParsedScriptItem[] = [];
+  let offset = 0;
+
+  while (offset < scriptBytes.length) {
+    const opcode = scriptBytes[offset++];
+    if (opcode === 0x00) {
+      items.push({ kind: "num", value: 0 });
+      continue;
+    }
+    if (opcode >= 0x51 && opcode <= 0x60) {
+      items.push({ kind: "num", value: opcode - 0x50 });
+      continue;
+    }
+
+    let length: number;
+    if (opcode >= 1 && opcode <= 75) {
+      length = opcode;
+    } else if (opcode === 0x4c) {
+      if (offset >= scriptBytes.length) return null;
+      length = scriptBytes[offset++];
+    } else {
+      return null;
+    }
+
+    if (offset + length > scriptBytes.length) return null;
+    items.push({
+      kind: "data",
+      data: scriptBytes.slice(offset, offset + length),
+    });
+    offset += length;
+  }
+
+  return items;
+}
+
+function itemNumber(item: ParsedScriptItem): number | null {
+  if (item.kind === "num") return item.value;
+  if (item.data.length === 1) return item.data[0];
+  return null;
+}
+
+function equalBytes(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+export type ParsedInscriptionReveal = {
+  content: Uint8Array;
+  contentType: string;
+  signatureWithHashType: Uint8Array;
+  redeemScript: Uint8Array;
+  compressedPubkeyHex: string;
+};
+
+export function parseInscriptionRevealScriptSig(
+  scriptSigHex: string,
+): ParsedInscriptionReveal | null {
+  let scriptBytes: Uint8Array;
+  try {
+    scriptBytes = hexToBytes(scriptSigHex);
+  } catch {
+    return null;
+  }
+  if (scriptBytes.length === 0 || scriptBytes.length > 1650) return null;
+
+  const items = parsePushOnlyScript(scriptBytes);
+  if (!items || items.length < 7) return null;
+
+  const magic = items[0];
+  if (
+    magic.kind !== "data" ||
+    new TextDecoder().decode(magic.data) !== "ord"
+  ) {
+    return null;
+  }
+
+  const pieceCount = itemNumber(items[1]);
+  if (
+    pieceCount === null ||
+    pieceCount < 1 ||
+    pieceCount > INSCRIPTION_MAX_PIECES_PER_REVEAL
+  ) {
+    return null;
+  }
+
+  const typeItem = items[2];
+  if (typeItem.kind !== "data") return null;
+  const contentType = new TextDecoder().decode(typeItem.data);
+  if (
+    typeItem.data.length < 3 ||
+    typeItem.data.length > 96 ||
+    !contentType.includes("/")
+  ) {
+    return null;
+  }
+
+  const expectedItems = 3 + 2 * pieceCount + 2;
+  if (items.length !== expectedItems) return null;
+
+  const pieces: Uint8Array[] = [];
+  for (let i = 0; i < pieceCount; i += 1) {
+    const index = itemNumber(items[3 + i * 2]);
+    const piece = items[4 + i * 2];
+    if (index !== pieceCount - 1 - i || piece.kind !== "data") return null;
+    if (piece.data.length === 0 || piece.data.length > INSCRIPTION_MAX_PIECE_BYTES) {
+      return null;
+    }
+    pieces.push(piece.data);
+  }
+
+  const signatureItem = items[3 + 2 * pieceCount];
+  const redeemItem = items[4 + 2 * pieceCount];
+  if (signatureItem.kind !== "data" || redeemItem.kind !== "data") return null;
+  if (
+    signatureItem.data.length < 9 ||
+    signatureItem.data.length > 73 ||
+    redeemItem.data.length < 68
+  ) {
+    return null;
+  }
+
+  const content = concat(...pieces);
+  const redeem = redeemItem.data;
+
+  // ZApp's redeem script begins with a direct push of one compressed secp256k1 pubkey.
+  if (
+    redeem[0] !== 33 ||
+    redeem.length < 34 ||
+    ![0x02, 0x03].includes(redeem[1])
+  ) {
+    return null;
+  }
+  const pubkey = redeem.slice(1, 34);
+
+  let expectedRedeem: Uint8Array;
+  try {
+    expectedRedeem = buildRedeemScript({
+      compressedPubkeyHex: bytesToHex(pubkey),
+      content,
+      contentType,
+    });
+  } catch {
+    return null;
+  }
+  if (!equalBytes(expectedRedeem, redeem)) return null;
+
+  return {
+    content,
+    contentType,
+    signatureWithHashType: signatureItem.data,
+    redeemScript: redeem,
+    compressedPubkeyHex: bytesToHex(pubkey),
+  };
+}
