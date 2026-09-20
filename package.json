@@ -18,7 +18,9 @@
     "worker:nft": "node --experimental-strip-types scripts/nft-worker.ts --watch",
     "preflight": "node --experimental-strip-types scripts/preflight.ts",
     "preflight:public": "node --experimental-strip-types scripts/preflight.ts --public",
-    "canary:audit": "node --experimental-strip-types scripts/canary-audit.ts"
+    "canary:audit": "node --experimental-strip-types scripts/canary-audit.ts",
+    "watch:solana": "node --experimental-strip-types scripts/watch-solana.ts --watch",
+    "worker:backend": "node --experimental-strip-types scripts/backend-worker.ts"
   },
   "dependencies": {
     "@solana/spl-token": "^0.4.15",
