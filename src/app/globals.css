@@ -1555,3 +1555,25 @@ a.leaderboard-row:hover {
     grid-template-columns: 1fr;
   }
 }
+
+
+.burn-hero {
+  padding: 72px 0 18px;
+}
+.burn-hero h1 {
+  max-width: 920px;
+  margin: 12px 0 18px;
+  font-size: clamp(48px, 7vw, 84px);
+  line-height: .95;
+  letter-spacing: -.06em;
+}
+.burn-hero p {
+  max-width: 720px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.65;
+}
+.burn-register {
+  padding-top: 48px;
+}
