@@ -14,10 +14,19 @@ A valid v1 source transaction MUST:
 
 1. be on Solana mainnet and have `finalized` commitment;
 2. execute successfully;
-3. contain exactly one top-level `BurnChecked` instruction from SPL Token or Token-2022;
-4. contain exactly one memo beginning `ZAPP1:`;
-5. place a valid Zcash mainnet legacy transparent address after that prefix; and
-6. have the burn authority as a direct signer.
+3. contain exactly one `BurnChecked` across both top-level and inner instructions;
+4. have that burn be top-level and executed by SPL Token or Token-2022;
+5. contain exactly one top-level memo from any supported deployed Memo program, beginning `ZAPP1:`;
+6. place a valid Zcash mainnet legacy transparent address after that prefix;
+7. have the burn authority as a direct signer;
+8. have `preTokenBalances` identify that authority as the source token-account owner;
+9. reject system/incinerator-owned token accounts;
+10. have the source balance decrease equal the exact `BurnChecked` uint64 amount; and
+11. have the `BurnChecked` decimals byte agree with the recorded source-token decimals when available.
+
+Canonical verification uses raw Solana instruction bytes (`encoding: "json"`), resolves
+address-lookup-table keys, and supports transaction versions through v1. `jsonParsed` is
+not a source of protocol truth.
 
 Requiring one burn and one memo deliberately removes matching ambiguity.
 
@@ -86,3 +95,48 @@ proof state above the common ancestor is invalidated and replayed.
 
 Unknown versions or operations MUST be ignored, not guessed. A future protocol version may
 add proof transfer/splitting or native-ZSA migration without changing v1 history.
+
+## Ownership transfers
+
+A confirmed ZApp Proof has an ownership marker: the exact marker output created by its
+claim transaction. Initial ownership is the destination committed in the Solana burn.
+
+A v1 ownership transfer is valid only when a Zcash transaction:
+
+1. spends the current canonical marker outpoint;
+2. contains exactly one ZApp transfer payload;
+3. that payload names the Proof's 32-byte burn ID; and
+4. creates exactly one marker-value output to the new transparent owner.
+
+Transfer payload:
+
+| Offset | Bytes | Meaning |
+|---|---:|---|
+| 0 | 4 | ASCII `ZAPP` |
+| 4 | 1 | version = 1 |
+| 5 | 1 | operation = 2 (transfer) |
+| 6 | 32 | burn ID |
+
+The indexer processes transfers in Zcash chain order. A transaction that does not spend the
+current marker cannot change ownership. This makes ownership reconstructible after any
+number of transfers rather than permanently equating ownership with the first recipient.
+
+## Operator independence and rescue
+
+The official relay is convenience infrastructure, not an issuer. Anyone can independently
+verify a finalized burn and pay to anchor the same valid Proof. The repository ships
+`relay:proof` specifically so an official-relay outage does not strand a finalized burn.
+
+The first valid claim in canonical Zcash chain order wins for a burn ID. A third party may
+pay to deliver the correct Proof to the burner-selected destination; they cannot redirect it.
+
+## Canonical state root
+
+An indexer publishes a SHA-256 state root over all confirmed Proofs ordered by burn ID.
+Each row commits to:
+
+`burn_id | mint | amount_base_units | current_owner | owner_txid | owner_vout`
+
+prefixed by the domain string `ZAPP_STATE_V1\n`. Two independent indexers at the same
+Zcash block hash should publish the same root, proof count and aggregate base-unit amount.
+A mismatch is an auditable signal that one indexer has incomplete or divergent chain data.
