@@ -5,6 +5,8 @@ export type LaunchMessageInput = {
   symbol: string;
   imageUrl?: string | null;
   description?: string | null;
+  websiteUrl?: string | null;
+  xUrl?: string | null;
 };
 
 export function buildLaunchMessage(input: LaunchMessageInput): string {
@@ -15,5 +17,7 @@ export function buildLaunchMessage(input: LaunchMessageInput): string {
     input.symbol.trim().toUpperCase(),
     (input.imageUrl || "").trim(),
     (input.description || "").trim(),
+    (input.websiteUrl || "").trim(),
+    (input.xUrl || "").trim(),
   ]);
 }
