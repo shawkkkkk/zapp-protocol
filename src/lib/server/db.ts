@@ -693,3 +693,81 @@ export async function getServiceHealth(service: string): Promise<ServiceHealthRo
   );
   return result.rows[0] || null;
 }
+
+
+export type AssetDiscoverySort = "newest" | "trending" | "most-burned" | "recently-stamped";
+
+export type AssetDiscoveryRow = AssetRow & {
+  verified_burns: number;
+  burned_base_units: string;
+  confirmed_nfts: number;
+  pending_nfts: number;
+  burns_24h: number;
+  nfts_24h: number;
+  last_stamp_at: string | null;
+};
+
+export async function listAssetsForDiscovery(
+  sort: AssetDiscoverySort = "newest",
+  limit = 24,
+): Promise<AssetDiscoveryRow[]> {
+  const safeLimit = Math.max(1, Math.min(limit, 100));
+  const orderBy =
+    sort === "most-burned"
+      ? "burned_base_units_numeric DESC, a.created_at DESC"
+      : sort === "recently-stamped"
+        ? "last_stamp_at DESC NULLS LAST, a.created_at DESC"
+        : sort === "trending"
+          ? "trend_score DESC, a.created_at DESC"
+          : "a.created_at DESC";
+
+  const result = await database().query<AssetDiscoveryRow>(
+    `WITH burn_stats AS (
+       SELECT
+         c.mint,
+         COUNT(*)::int AS verified_burns,
+         COALESCE(SUM(c.amount_base_units), 0)::numeric AS burned_base_units_numeric,
+         COUNT(*) FILTER (WHERE c.created_at >= NOW() - INTERVAL '24 hours')::int AS burns_24h
+       FROM claims c
+       GROUP BY c.mint
+     ),
+     nft_stats AS (
+       SELECT
+         c.mint,
+         COUNT(*) FILTER (WHERE n.status='confirmed')::int AS confirmed_nfts,
+         COUNT(*) FILTER (
+           WHERE n.status IN ('queued','building','commit_broadcast','reveal_broadcast')
+         )::int AS pending_nfts,
+         COUNT(*) FILTER (
+           WHERE n.status='confirmed' AND n.created_at >= NOW() - INTERVAL '24 hours'
+         )::int AS nfts_24h,
+         MAX(n.created_at) FILTER (WHERE n.status='confirmed') AS last_stamp_at
+       FROM claims c
+       JOIN nft_mints n ON n.burn_id=c.burn_id
+       GROUP BY c.mint
+     )
+     SELECT
+       a.*,
+       COALESCE(b.verified_burns,0)::int AS verified_burns,
+       COALESCE(b.burned_base_units_numeric,0)::text AS burned_base_units,
+       COALESCE(n.confirmed_nfts,0)::int AS confirmed_nfts,
+       COALESCE(n.pending_nfts,0)::int AS pending_nfts,
+       COALESCE(b.burns_24h,0)::int AS burns_24h,
+       COALESCE(n.nfts_24h,0)::int AS nfts_24h,
+       n.last_stamp_at,
+       COALESCE(b.burned_base_units_numeric,0) AS burned_base_units_numeric,
+       (
+         COALESCE(b.burns_24h,0) * 4 +
+         COALESCE(n.nfts_24h,0) * 8 +
+         COALESCE(b.verified_burns,0)
+       )::numeric AS trend_score
+     FROM assets a
+     LEFT JOIN burn_stats b ON b.mint=a.mint
+     LEFT JOIN nft_stats n ON n.mint=a.mint
+     WHERE a.enabled=TRUE
+     ORDER BY ${orderBy}
+     LIMIT $1`,
+    [safeLimit],
+  );
+  return result.rows;
+}
