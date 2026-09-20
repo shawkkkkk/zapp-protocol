@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { Connection } from "@solana/web3.js";
+import { useUnifiedWallet } from "@jup-ag/wallet-adapter";
+import { ZAppWalletButton } from "@/components/ZAppWalletButton";
 import { buildLaunchMessage } from "@/lib/launch";
 import { bytesToHex, parseUiAmount } from "@/lib/protocol";
 import {
   browserSolanaRpc,
   buildFixedSupplyMintTransaction,
-  getInjectedWallet,
 } from "@/lib/client/solana";
 
 const publicLaunchEnabled =
@@ -41,7 +42,7 @@ async function waitForFinalized(signature: string): Promise<void> {
 
 export function LaunchCreator() {
   const [mode, setMode] = useState<Mode>("new");
-  const [wallet, setWallet] = useState("");
+  const { publicKey, sendTransaction, signMessage, wallet } = useUnifiedWallet();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -59,14 +60,6 @@ export function LaunchCreator() {
   const [creationSignature, setCreationSignature] = useState("");
   const [inspection, setInspection] = useState<Inspection | null>(null);
 
-  async function connect() {
-    const provider = getInjectedWallet();
-    if (!provider) throw new Error("No compatible Solana wallet found");
-    const result = await provider.connect();
-    setWallet(result.publicKey.toBase58());
-    return result.publicKey;
-  }
-
   function validateMetadata() {
     if (!name.trim()) throw new Error("Name is required");
     if (!symbol.trim()) throw new Error("Ticker is required");
@@ -81,9 +74,9 @@ export function LaunchCreator() {
     minBurnBaseUnits: string;
   }) {
     validateMetadata();
-    const provider = getInjectedWallet();
-    if (!provider?.signMessage) {
-      throw new Error("Wallet message signing is required to authenticate launch metadata");
+    if (!publicKey) throw new Error("Connect a Solana wallet first");
+    if (!signMessage) {
+      throw new Error("The selected wallet does not support message signing");
     }
 
     const launchMessage = buildLaunchMessage({
@@ -98,7 +91,7 @@ export function LaunchCreator() {
       minBurnBaseUnits: input.minBurnBaseUnits,
     });
 
-    const authorization = await provider.signMessage(
+    const authorization = await signMessage(
       new TextEncoder().encode(launchMessage),
     );
 
@@ -109,7 +102,7 @@ export function LaunchCreator() {
         mint: input.mint,
         creationSignature: input.creationSignature,
         creator: input.creator,
-        registrationSignature: bytesToHex(authorization.signature),
+        registrationSignature: bytesToHex(authorization),
         name,
         symbol,
         imageUrl: imageUrl || null,
@@ -159,10 +152,8 @@ export function LaunchCreator() {
     setBusy(true);
     try {
       validateMetadata();
-      const provider = getInjectedWallet();
-      if (!provider) throw new Error("No compatible Solana wallet found");
-      const owner = provider.publicKey || (await provider.connect()).publicKey;
-      setWallet(owner.toBase58());
+      if (!publicKey) throw new Error("Connect a Solana wallet first");
+      const owner = publicKey;
 
       const launchDecimals = Number.parseInt(decimals, 10);
       const minBurnBaseUnits = parseUiAmount(minimumBurn, launchDecimals).toString();
@@ -171,13 +162,16 @@ export function LaunchCreator() {
         supplyUi: supply,
         decimals: launchDecimals,
       });
-      const sent = await provider.signAndSendTransaction(built.transaction);
+      const signature = await sendTransaction(
+        built.transaction,
+        new Connection(browserSolanaRpc(), "confirmed"),
+      );
       setMessage("Token transaction sent. Waiting for Solana finality…");
-      await waitForFinalized(sent.signature);
+      await waitForFinalized(signature);
 
       await registerLaunch({
         mint: built.mint,
-        creationSignature: sent.signature,
+        creationSignature: signature,
         creator: owner.toBase58(),
         minBurnBaseUnits,
       });
@@ -209,10 +203,8 @@ export function LaunchCreator() {
       }
       const minBurnBaseUnits = parseUiAmount(minimumBurn, inspected.decimals).toString();
 
-      const provider = getInjectedWallet();
-      if (!provider) throw new Error("No compatible Solana wallet found");
-      const owner = provider.publicKey || (await provider.connect()).publicKey;
-      setWallet(owner.toBase58());
+      if (!publicKey) throw new Error("Connect a Solana wallet first");
+      const owner = publicKey;
 
       await registerLaunch({
         mint: existingMint.trim(),
@@ -238,12 +230,7 @@ export function LaunchCreator() {
             <div className="eyebrow">CREATE A ZAPP LAUNCH</div>
             <h2>Launch a coin</h2>
           </div>
-          <button
-            className="wallet"
-            onClick={() => connect().catch((error) => setMessage(error.message))}
-          >
-            {wallet ? wallet.slice(0, 4) + "…" + wallet.slice(-4) : "Connect wallet"}
-          </button>
+          <ZAppWalletButton compact />
         </div>
 
         {!publicLaunchEnabled && (
