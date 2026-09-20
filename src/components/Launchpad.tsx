@@ -41,6 +41,7 @@ export function Launchpad({
   const [stage, setStage] = useState<Stage>("idle");
   const [message, setMessage] = useState("");
   const [result, setResult] = useState<{ solana?: string; zcash?: string; burnId?: string; nft?: string }>({});
+  const [recoverySignature, setRecoverySignature] = useState("");
 
   const [createSupply, setCreateSupply] = useState("1000000000");
   const [createDecimals, setCreateDecimals] = useState("6");
@@ -87,6 +88,49 @@ export function Launchpad({
     }
   }
 
+  async function claimFromSignature(signature: string) {
+    const response = await fetch("/api/claims", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ solanaSignature: signature }),
+    });
+    const json = await response.json();
+    if (!response.ok && response.status !== 202) {
+      throw new Error(json.error || "Zcash NFT claim failed");
+    }
+    const burnId = json.proof?.burnId || json.claim?.burnId;
+    setResult({
+      solana: signature,
+      zcash: json.claim?.zcashTxid || undefined,
+      burnId,
+      nft: json.nft?.status || "queued",
+    });
+    if (burnId && json.nft?.status !== "confirmed") void watchNft(burnId);
+    return json;
+  }
+
+  async function recoverBurn() {
+    setMessage("");
+    const signature = recoverySignature.trim();
+    if (!signature) {
+      setMessage("Paste the finalized Solana burn transaction signature.");
+      return;
+    }
+    try {
+      setStage("anchoring");
+      const json = await claimFromSignature(signature);
+      setStage("done");
+      setMessage(
+        json.nft?.status === "confirmed"
+          ? "This burn already has a confirmed Zcash NFT."
+          : "Burn recovered and queued. Watching NFT delivery now…"
+      );
+    } catch (error) {
+      setStage("idle");
+      setMessage(error instanceof Error ? error.message : "Burn recovery failed");
+    }
+  }
+
   async function migrate() {
     setMessage("");
     setResult({});
@@ -110,28 +154,13 @@ export function Launchpad({
       await waitForFinalized(sent.signature);
 
       setStage("anchoring");
-      const response = await fetch("/api/claims", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ solanaSignature: sent.signature }),
-      });
-      const json = await response.json();
-      if (!response.ok && response.status !== 202) throw new Error(json.error || "Zcash NFT claim failed");
-
-      const burnId = json.proof?.burnId || json.claim?.burnId;
-      setResult({
-        solana: sent.signature,
-        zcash: json.claim?.zcashTxid || undefined,
-        burnId,
-        nft: json.nft?.status || "queued",
-      });
+      const json = await claimFromSignature(sent.signature);
       setStage("done");
       setMessage(
         json.nft?.status === "confirmed"
           ? "Zcash NFT confirmed."
           : "Burn verified. Watching the Zcash NFT mint now…"
       );
-      if (burnId && json.nft?.status !== "confirmed") void watchNft(burnId);
     } catch (error) {
       setStage("idle");
       setMessage(error instanceof Error ? error.message : "Claim failed");
@@ -273,6 +302,20 @@ export function Launchpad({
 
         <button className="primary" disabled={stage !== "idle" && stage !== "done"} onClick={migrate}>
           {buttonText}
+        </button>
+
+        <div className="launch-divider"><span>already burned?</span></div>
+        <label>
+          <span>Recover finalized burn</span>
+          <input
+            value={recoverySignature}
+            onChange={(e) => setRecoverySignature(e.target.value.trim())}
+            placeholder="Solana transaction signature"
+          />
+          <small>Anyone can re-submit a valid finalized ZApp burn. The NFT can only go to the Zcash address committed in that burn.</small>
+        </label>
+        <button className="secondary" disabled={stage !== "idle" && stage !== "done"} onClick={recoverBurn}>
+          Recover & queue NFT
         </button>
 
         {message && <div className="notice">{message}</div>}
