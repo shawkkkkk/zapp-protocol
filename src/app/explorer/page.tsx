@@ -10,13 +10,29 @@ type Nft = {
   currentOwner: string | null;
   symbol: string | null;
   name: string | null;
+  decimals: number | null;
   status: string;
   commitTxid: string | null;
   revealTxid: string | null;
   inscriptionId: string | null;
   contentSha256: string;
+  indexerVerifiedAt: string | null;
+  indexerVerifiedHeight: string | null;
   error: string | null;
 };
+
+function formatBaseUnits(raw: string, decimals: number | null): string {
+  const amount = BigInt(raw || "0");
+  const d = decimals ?? 0;
+  if (d <= 0) return amount.toString();
+  const scale = 10n ** BigInt(d);
+  const whole = amount / scale;
+  const fraction = (amount % scale)
+    .toString()
+    .padStart(d, "0")
+    .replace(/0+$/, "");
+  return fraction ? whole.toString() + "." + fraction : whole.toString();
+}
 
 export default function Explorer() {
   const [nfts, setNfts] = useState<Nft[]>([]);
@@ -24,7 +40,7 @@ export default function Explorer() {
 
   useEffect(() => {
     const load = () =>
-      fetch("/api/nfts?limit=100")
+      fetch("/api/nfts?limit=100", { cache: "no-store" })
         .then(async (r) => {
           const body = await r.json();
           if (!r.ok) throw new Error(body.error || "Unable to load NFT mints");
@@ -38,47 +54,75 @@ export default function Explorer() {
 
   return (
     <main className="shell explorer">
-      <a className="brand" href="/">ZApp</a>
+      <nav className="explorer-nav">
+        <a className="brand" href="/">ZApp</a>
+        <a className="textlink" href="/">Back to launchpad</a>
+      </nav>
+
       <div className="sectionhead">
-        <div className="eyebrow">PUBLIC MINT QUEUE</div>
-        <h1>Zcash NFT explorer</h1>
-        <p>Every row starts with a finalized Solana burn and ends with a collectible inscription on Zcash.</p>
+        <div className="eyebrow">PUBLIC PROOF REGISTER</div>
+        <h1>Every burn.</h1>
+        <p>
+          Finalized Solana destruction, Zcash inscription delivery, and independent
+          verification in one public trail.
+        </p>
       </div>
+
       {error && <div className="notice">{error}</div>}
+
       <div className="tablewrap">
         <table>
           <thead>
             <tr>
-              <th>Status</th>
+              <th>Verification</th>
               <th>Asset</th>
-              <th>Amount</th>
-              <th>Owner</th>
-              <th>Inscription</th>
+              <th>Destroyed</th>
+              <th>Current owner</th>
+              <th>Proof</th>
             </tr>
           </thead>
           <tbody>
-            {nfts.map((nft) => (
-              <tr key={nft.burnId}>
-                <td><span className={"status " + nft.status}>{nft.status}</span></td>
-                <td>
-                  <a className="textlink" href={"/asset/" + nft.mint}>
-                    {nft.symbol ? "$" + nft.symbol : nft.mint.slice(0, 8) + "…"}
-                  </a>
-                </td>
-                <td>{nft.amountBaseUnits}</td>
-                <td><code>{(nft.currentOwner || nft.recipient).slice(0, 8)}…{(nft.currentOwner || nft.recipient).slice(-6)}</code></td>
-                <td>
-                  <code>
-                    {nft.inscriptionId
-                      ? nft.inscriptionId.slice(0, 12) + "…i0"
-                      : nft.revealTxid
-                        ? nft.revealTxid.slice(0, 12) + "…"
-                        : "pending"}
-                  </code>
-                </td>
+            {nfts.map((nft) => {
+              const verified = Boolean(
+                nft.status === "confirmed" && nft.indexerVerifiedAt,
+              );
+              const owner = nft.currentOwner || nft.recipient;
+              return (
+                <tr key={nft.burnId}>
+                  <td>
+                    <span className={"status " + (verified ? "verified" : nft.status)}>
+                      {verified ? "verified" : nft.status}
+                    </span>
+                  </td>
+                  <td>
+                    <a className="textlink" href={"/asset/" + nft.mint}>
+                      {nft.symbol
+                        ? "$" + nft.symbol
+                        : nft.mint.slice(0, 8) + "…"}
+                    </a>
+                  </td>
+                  <td>
+                    {formatBaseUnits(nft.amountBaseUnits, nft.decimals)}
+                    {nft.symbol ? " $" + nft.symbol : ""}
+                  </td>
+                  <td>
+                    <code>
+                      {owner.slice(0, 8)}…{owner.slice(-6)}
+                    </code>
+                  </td>
+                  <td>
+                    <a className="textlink" href={"/proof/" + nft.burnId}>
+                      {nft.inscriptionId ? "View proof →" : "View status →"}
+                    </a>
+                  </td>
+                </tr>
+              );
+            })}
+            {!nfts.length && !error && (
+              <tr>
+                <td colSpan={5}>No ZApp burns yet.</td>
               </tr>
-            ))}
-            {!nfts.length && !error && <tr><td colSpan={5}>No ZApp NFT mints yet.</td></tr>}
+            )}
           </tbody>
         </table>
       </div>
