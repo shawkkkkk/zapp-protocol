@@ -55,6 +55,34 @@ export function Launchpad({
     setWallet(connected.publicKey.toBase58());
   }
 
+  async function watchNft(burnId: string) {
+    for (let attempt = 0; attempt < 180; attempt += 1) {
+      try {
+        const response = await fetch("/api/claims/" + burnId, { cache: "no-store" });
+        if (response.ok) {
+          const json = await response.json();
+          const status = json.nft?.status;
+          if (status) {
+            setResult((current) => ({
+              ...current,
+              zcash: json.nft?.revealTxid || current.zcash,
+              nft: status,
+            }));
+            if (status === "confirmed") {
+              setMessage("Zcash NFT confirmed. Inscription: " + json.nft.inscriptionId);
+              return;
+            }
+            if (status === "failed") {
+              setMessage("NFT mint needs a retry: " + (json.nft.error || "worker error"));
+              return;
+            }
+          }
+        }
+      } catch {}
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+    }
+  }
+
   async function migrate() {
     setMessage("");
     setResult({});
@@ -86,18 +114,20 @@ export function Launchpad({
       const json = await response.json();
       if (!response.ok && response.status !== 202) throw new Error(json.error || "Zcash NFT claim failed");
 
+      const burnId = json.proof?.burnId || json.claim?.burnId;
       setResult({
         solana: sent.signature,
         zcash: json.claim?.zcashTxid || undefined,
-        burnId: json.proof?.burnId || json.claim?.burnId,
+        burnId,
         nft: json.nft?.status || "queued",
       });
       setStage("done");
       setMessage(
         json.nft?.status === "confirmed"
           ? "Zcash NFT confirmed."
-          : "Burn verified. Your Zcash NFT mint job is in the queue."
+          : "Burn verified. Watching the Zcash NFT mint now…"
       );
+      if (burnId && json.nft?.status !== "confirmed") void watchNft(burnId);
     } catch (error) {
       setStage("idle");
       setMessage(error instanceof Error ? error.message : "Claim failed");
