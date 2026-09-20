@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { mutationAllowed } from "@/lib/server/mutation-access";
 import { getClaim, listClaims } from "@/lib/server/db";
 import { processBurnSignature } from "@/lib/server/claim-service";
 import { enforceRateLimit, RateLimitError, rateLimitResponse } from "@/lib/server/rate-limit";
@@ -36,8 +37,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    if (process.env.ZAPP_PUBLIC_LAUNCH_ENABLED !== "true") {
-      return NextResponse.json({ error: "ZApp public launch is not enabled yet" }, { status: 503 });
+    if (!mutationAllowed(request)) {
+      return NextResponse.json(
+        { error: "ZApp public launch is not enabled yet" },
+        { status: 503 },
+      );
     }
     const body = (await request.json()) as { solanaSignature?: string };
     const signature = body.solanaSignature?.trim();
