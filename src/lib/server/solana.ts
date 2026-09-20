@@ -1,6 +1,7 @@
 import {
   Connection,
   PublicKey,
+  SystemProgram,
   type ParsedInstruction,
   type PartiallyDecodedInstruction,
 } from "@solana/web3.js";
@@ -78,6 +79,35 @@ function parseBurnChecked(
   return { mint, amount, authority, locator: `message:${index}` };
 }
 
+function verifyConfiguredServiceFee(
+  instructions: Array<ParsedInstruction | PartiallyDecodedInstruction>,
+  burnAuthority: string,
+): void {
+  const required = BigInt(process.env.ZAPP_FEE_LAMPORTS || "0");
+  if (required <= 0n) return;
+
+  const treasury = process.env.ZAPP_FEE_TREASURY;
+  if (!treasury) throw new Error("ZAPP_FEE_TREASURY is required when a relay fee is enabled");
+
+  const matches = instructions.filter((ix) => {
+    if (instructionProgramId(ix) !== SystemProgram.programId.toBase58()) return false;
+    if (!("parsed" in ix) || !ix.parsed || typeof ix.parsed !== "object") return false;
+    const parsed = ix.parsed as {
+      type?: string;
+      info?: { source?: string; destination?: string; lamports?: number | string };
+    };
+    if ((parsed.type || "").toLowerCase() !== "transfer") return false;
+    if (parsed.info?.source !== burnAuthority || parsed.info?.destination !== treasury) return false;
+    try {
+      return BigInt(String(parsed.info?.lamports ?? "0")) >= required;
+    } catch {
+      return false;
+    }
+  });
+
+  if (matches.length !== 1) throw new Error("Required ZApp relay fee was not paid in the burn transaction");
+}
+
 export async function verifyBurnTransaction(
   signature: string,
   connection = solanaConnection(),
@@ -129,6 +159,8 @@ export async function verifyBurnTransaction(
     throw new Error("Burn authority is not a direct transaction signer; multisig/delegated v1 claims are not supported");
   }
 
+  verifyConfiguredServiceFee(instructions, burn.authority);
+
   const burnId = deriveBurnId({
     solanaGenesisHash: genesisHash,
     signature,
@@ -169,7 +201,7 @@ export async function findBurnEvidenceByCommitment(
         const evidence = await verifyBurnTransaction(candidate.signature, connection);
         if (evidence.burnId === burnId) return evidence;
       } catch {
-        // Not a ZApp burn. Continue scanning public history.
+        // Not a valid ZApp burn. Continue scanning public history.
       }
     }
 
