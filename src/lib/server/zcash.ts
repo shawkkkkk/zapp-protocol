@@ -1,4 +1,10 @@
-import { bytesToHex, decodeClaimPayload, decodeOpReturnScript, encodeClaimPayload } from "../protocol.ts";
+import {
+  bytesToHex,
+  decodeClaimPayload,
+  decodeOpReturnScript,
+  encodeClaimPayload,
+  encodeOpReturnScript,
+} from "../protocol.ts";
 import { assertMainnetTransparentAddress } from "./crypto.ts";
 import type { BurnEvidence } from "../validation.ts";
 
@@ -24,7 +30,9 @@ export class ZcashRpc {
     });
     if (!response.ok) throw new Error(`Zcash RPC HTTP ${response.status}`);
     const body = (await response.json()) as { result?: T; error?: RpcError | null };
-    if (body.error) throw new Error(`Zcash RPC ${method}: ${body.error.message || body.error.code || "unknown error"}`);
+    if (body.error) {
+      throw new Error(`Zcash RPC ${method}: ${body.error.message || body.error.code || "unknown error"}`);
+    }
     return body.result as T;
   }
 }
@@ -47,8 +55,50 @@ type DecodedTx = {
 
 function markerZats(): bigint {
   const value = BigInt(process.env.ZCASH_MARKER_ZATS || "1000");
-  if (value <= 0n || value > 100_000_000n) throw new Error("ZCASH_MARKER_ZATS must be 1..100000000");
+  if (value <= 0n || value > 100_000_000n) {
+    throw new Error("ZCASH_MARKER_ZATS must be 1..100000000");
+  }
   return value;
+}
+
+function compactSizeHex(value: number): string {
+  if (!Number.isSafeInteger(value) || value < 0 || value >= 253) {
+    throw new Error("ZApp writer only supports compact-size values below 253");
+  }
+  return value.toString(16).padStart(2, "0");
+}
+
+/**
+ * zcashd's final createrawtransaction RPC only accepts address outputs; it has
+ * no Bitcoin-style {data: ...} output syntax. We therefore ask zcashd itself
+ * to create a context-correct transaction with a unique zero-value P2SH
+ * placeholder, replace that output script before funding/signing, and decode
+ * the result again with zcashd. This avoids hand-rolling transaction versions,
+ * branch IDs, expiry heights, inputs, fees, or signatures.
+ */
+export function replaceZeroValueOutputScript(
+  transactionHex: string,
+  oldScriptHex: string,
+  newScriptHex: string,
+): string {
+  const oldBytes = oldScriptHex.length / 2;
+  const newBytes = newScriptHex.length / 2;
+  if (!Number.isInteger(oldBytes) || !Number.isInteger(newBytes)) {
+    throw new Error("Output scripts must be whole bytes");
+  }
+
+  const zeroValue = "0000000000000000";
+  const needle = `${zeroValue}${compactSizeHex(oldBytes)}${oldScriptHex}`.toLowerCase();
+  const replacement = `${zeroValue}${compactSizeHex(newBytes)}${newScriptHex}`.toLowerCase();
+  const tx = transactionHex.toLowerCase();
+
+  const first = tx.indexOf(needle);
+  if (first === -1) throw new Error("Could not locate the ZApp carrier placeholder output");
+  if (tx.indexOf(needle, first + 1) !== -1) {
+    throw new Error("Carrier placeholder is not unique; refusing to mutate transaction");
+  }
+
+  return tx.slice(0, first) + replacement + tx.slice(first + needle.length);
 }
 
 export function findClaimPayloads(decoded: DecodedTx): Array<{ vout: number; payloadHex: string }> {
@@ -60,7 +110,7 @@ export function findClaimPayloads(decoded: DecodedTx): Array<{ vout: number; pay
       decodeClaimPayload(data);
       found.push({ vout: output.n, payloadHex: bytesToHex(data) });
     } catch {
-      // Not a ZApp claim.
+      // Not a ZApp proof.
     }
   }
   return found;
@@ -72,7 +122,9 @@ function assertTransactionCarriesProof(
   payloadHex: string,
 ): { recipientVout: number; carrierVout: number } {
   const carriers = findClaimPayloads(decoded).filter((item) => item.payloadHex === payloadHex);
-  if (carriers.length !== 1) throw new Error("Prepared Zcash transaction must contain exactly one matching ZApp Proof");
+  if (carriers.length !== 1) {
+    throw new Error("Prepared Zcash transaction must contain exactly one matching ZApp Proof");
+  }
 
   const targetZats = markerZats();
   const recipients = decoded.vout.filter((output) => {
@@ -82,7 +134,52 @@ function assertTransactionCarriesProof(
   if (recipients.length !== 1) {
     throw new Error("Prepared Zcash transaction must contain exactly one marker output to the committed recipient");
   }
+
   return { recipientVout: recipients[0].n, carrierVout: carriers[0].vout };
+}
+
+async function buildUnfundedProofTransaction(
+  rpc: ZcashRpc,
+  evidence: BurnEvidence,
+  payloadHex: string,
+): Promise<string> {
+  // OP_TRUE is deterministic and decodescript gives us a valid P2SH address
+  // for the active network. It is only a temporary zero-value output.
+  const placeholder = await rpc.call<{ p2sh?: string }>("decodescript", ["51"]);
+  if (!placeholder.p2sh) throw new Error("Zcash node did not return a P2SH placeholder address");
+
+  const markerZec = Number(markerZats()) / 100_000_000;
+  const rawWithPlaceholder = await rpc.call<string>("createrawtransaction", [
+    [],
+    {
+      [evidence.recipient]: markerZec,
+      [placeholder.p2sh]: 0,
+    },
+  ]);
+
+  const decodedPlaceholder = await rpc.call<DecodedTx>("decoderawtransaction", [rawWithPlaceholder]);
+  const placeholderOutputs = decodedPlaceholder.vout.filter(
+    (output) =>
+      (output.scriptPubKey.addresses || []).includes(placeholder.p2sh as string) &&
+      BigInt(output.valueZat ?? -1) === 0n,
+  );
+  if (placeholderOutputs.length !== 1) {
+    throw new Error("Zcash writer could not create a unique carrier placeholder");
+  }
+
+  const opReturnScriptHex = bytesToHex(
+    encodeOpReturnScript(Uint8Array.from(Buffer.from(payloadHex, "hex"))),
+  );
+  const mutated = replaceZeroValueOutputScript(
+    rawWithPlaceholder,
+    placeholderOutputs[0].scriptPubKey.hex,
+    opReturnScriptHex,
+  );
+
+  // Make the node parse our mutation before it ever reaches a wallet/funder.
+  const decodedMutated = await rpc.call<DecodedTx>("decoderawtransaction", [mutated]);
+  assertTransactionCarriesProof(decodedMutated, evidence, payloadHex);
+  return mutated;
 }
 
 export async function broadcastProof(
@@ -92,11 +189,8 @@ export async function broadcastProof(
   assertMainnetTransparentAddress(evidence.recipient);
 
   const chain = await rpc.call<{ chain?: string }>("getblockchaininfo");
-  if (chain.chain && chain.chain !== "main") throw new Error(`Refusing to broadcast a mainnet ZApp Proof on chain ${chain.chain}`);
-
-  const address = await rpc.call<{ isvalid: boolean; address_type?: string }>("z_validateaddress", [evidence.recipient]);
-  if (!address.isvalid || !["p2pkh", "p2sh"].includes(address.address_type || "")) {
-    throw new Error("Destination is not a valid transparent Zcash mainnet address");
+  if (chain.chain && chain.chain !== "main") {
+    throw new Error(`Refusing to broadcast a mainnet ZApp Proof on chain ${chain.chain}`);
   }
 
   const payload = encodeClaimPayload({
@@ -105,24 +199,30 @@ export async function broadcastProof(
     amount: evidence.amount,
   });
   const payloadHex = bytesToHex(payload);
-  const zecValue = Number(markerZats()) / 100_000_000;
 
-  const raw = await rpc.call<string>("createrawtransaction", [
-    [],
-    { [evidence.recipient]: zecValue, data: payloadHex },
-  ]);
-  const funded = await rpc.call<{ hex: string }>("fundrawtransaction", [raw, false]);
+  const unfunded = await buildUnfundedProofTransaction(rpc, evidence, payloadHex);
+  const funded = await rpc.call<{ hex: string }>("fundrawtransaction", [unfunded]);
   const decodedFunded = await rpc.call<DecodedTx>("decoderawtransaction", [funded.hex]);
   const positions = assertTransactionCarriesProof(decodedFunded, evidence, payloadHex);
 
-  const signed = await rpc.call<{ hex: string; complete: boolean; errors?: unknown[] }>("signrawtransaction", [funded.hex]);
-  if (!signed.complete) throw new Error(`Zcash wallet could not fully sign transaction: ${JSON.stringify(signed.errors || [])}`);
+  const signed = await rpc.call<{ hex: string; complete: boolean; errors?: unknown[] }>(
+    "signrawtransaction",
+    [funded.hex],
+  );
+  if (!signed.complete) {
+    throw new Error(
+      `Zcash wallet could not fully sign transaction: ${JSON.stringify(signed.errors || [])}`,
+    );
+  }
 
   const decodedSigned = await rpc.call<DecodedTx>("decoderawtransaction", [signed.hex]);
   assertTransactionCarriesProof(decodedSigned, evidence, payloadHex);
 
   const txid = await rpc.call<string>("sendrawtransaction", [signed.hex, false]);
-  if (!/^[0-9a-f]{64}$/i.test(txid)) throw new Error("Zcash node returned an invalid transaction id");
+  if (!/^[0-9a-f]{64}$/i.test(txid)) {
+    throw new Error("Zcash node returned an invalid transaction id");
+  }
+
   return { txid, payloadHex, ...positions };
 }
 
@@ -134,10 +234,9 @@ export async function getZcashBlockHash(height: number, rpc = new ZcashRpc()): P
   return rpc.call<string>("getblockhash", [height]);
 }
 
-export async function getZcashBlock(heightOrHash: number | string, rpc = new ZcashRpc()): Promise<{
-  hash: string;
-  height: number;
-  tx: DecodedTx[];
-}> {
+export async function getZcashBlock(
+  heightOrHash: number | string,
+  rpc = new ZcashRpc(),
+): Promise<{ hash: string; height: number; tx: DecodedTx[] }> {
   return rpc.call("getblock", [String(heightOrHash), 2]);
 }
