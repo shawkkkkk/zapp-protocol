@@ -15,7 +15,8 @@
     "state:root": "node --experimental-strip-types scripts/state-root.ts",
     "build:signer": "cargo build --release --manifest-path native/zapp-zcash-signer/Cargo.toml",
     "check:signer": "cargo check --manifest-path native/zapp-zcash-signer/Cargo.toml",
-    "worker:nft": "node --experimental-strip-types scripts/nft-worker.ts --watch"
+    "worker:nft": "node --experimental-strip-types scripts/nft-worker.ts --watch",
+    "preflight": "node --experimental-strip-types scripts/preflight.ts"
   },
   "dependencies": {
     "@solana/spl-token": "^0.4.15",
