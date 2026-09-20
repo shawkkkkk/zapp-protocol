@@ -21,8 +21,9 @@ export async function canonicalState(): Promise<CanonicalState> {
     current_owner: string | null;
     owner_txid: string | null;
     owner_vout: number | null;
+    ownership_state: "tracked" | "terminal";
   }>(
-    `SELECT burn_id,mint,amount_base_units,current_owner,owner_txid,owner_vout
+    `SELECT burn_id,mint,amount_base_units,current_owner,owner_txid,owner_vout,ownership_state
      FROM claims
      WHERE status='confirmed'
      ORDER BY burn_id ASC`,
@@ -41,6 +42,7 @@ export async function canonicalState(): Promise<CanonicalState> {
         row.current_owner || "",
         row.owner_txid || "",
         row.owner_vout === null ? "" : String(row.owner_vout),
+        row.ownership_state,
       ].join("|") + "\n",
     );
   }
