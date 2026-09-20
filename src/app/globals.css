@@ -1975,3 +1975,15 @@ a.leaderboard-row:hover {
     max-height: 360px;
   }
 }
+
+
+.burn-wallet-hint {
+  margin: 10px 0 12px;
+  color: #b9ae8e;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.wallet-balance {
+  color: var(--acid) !important;
+  font-weight: 800;
+}
