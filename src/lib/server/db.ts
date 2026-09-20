@@ -413,6 +413,7 @@ export type AssetRow = {
   min_burn_base_units: string;
   creation_signature: string | null;
   registration_signature: string | null;
+  registered_supply_base_units: string | null;
   launch_slot: string;
   enabled: boolean;
   created_at: string;
@@ -432,6 +433,7 @@ export async function upsertAsset(input: {
   minBurnBaseUnits: string;
   creationSignature: string;
   registrationSignature: string;
+  registeredSupplyBaseUnits: string;
   launchSlot: number;
 }): Promise<AssetRow> {
   const db = database();
@@ -439,8 +441,8 @@ export async function upsertAsset(input: {
     `INSERT INTO assets (
       mint,token_program,name,symbol,decimals,creator,image_url,description,
       website_url,x_url,min_burn_base_units,creation_signature,
-      registration_signature,launch_slot
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+      registration_signature,registered_supply_base_units,launch_slot
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
     ON CONFLICT (mint) DO NOTHING
     RETURNING *`,
     [
@@ -457,6 +459,7 @@ export async function upsertAsset(input: {
       input.minBurnBaseUnits,
       input.creationSignature,
       input.registrationSignature,
+      input.registeredSupplyBaseUnits,
       input.launchSlot,
     ],
   );
@@ -481,7 +484,8 @@ export async function upsertAsset(input: {
     existing.x_url === (input.xUrl || null) &&
     existing.min_burn_base_units === input.minBurnBaseUnits &&
     existing.creation_signature === input.creationSignature &&
-    existing.registration_signature === input.registrationSignature;
+    existing.registration_signature === input.registrationSignature &&
+    existing.registered_supply_base_units === input.registeredSupplyBaseUnits;
 
   if (!same) {
     throw new Error(
@@ -769,6 +773,7 @@ export type AssetDiscoveryRow = AssetRow & {
   burns_24h: number;
   nfts_24h: number;
   last_stamp_at: string | null;
+  burned_percent: string;
 };
 
 export async function listAssetsForDiscovery(
@@ -778,7 +783,7 @@ export async function listAssetsForDiscovery(
   const safeLimit = Math.max(1, Math.min(limit, 100));
   const orderBy =
     sort === "most-burned"
-      ? "burned_base_units_numeric DESC, a.created_at DESC"
+      ? "burned_percent_numeric DESC, a.created_at DESC"
       : sort === "recently-stamped"
         ? "last_stamp_at DESC NULLS LAST, a.created_at DESC"
         : sort === "trending"
@@ -820,6 +825,24 @@ export async function listAssetsForDiscovery(
        COALESCE(n.nfts_24h,0)::int AS nfts_24h,
        n.last_stamp_at,
        COALESCE(b.burned_base_units_numeric,0) AS burned_base_units_numeric,
+       CASE
+         WHEN COALESCE(a.registered_supply_base_units,0) > 0
+         THEN LEAST(
+           100,
+           COALESCE(b.burned_base_units_numeric,0) * 100 /
+             a.registered_supply_base_units
+         )
+         ELSE 0
+       END::numeric AS burned_percent_numeric,
+       CASE
+         WHEN COALESCE(a.registered_supply_base_units,0) > 0
+         THEN LEAST(
+           100,
+           COALESCE(b.burned_base_units_numeric,0) * 100 /
+             a.registered_supply_base_units
+         )::text
+         ELSE '0'
+       END AS burned_percent,
        (
          COALESCE(b.burns_24h,0) * 4 +
          COALESCE(n.nfts_24h,0) * 8 +
