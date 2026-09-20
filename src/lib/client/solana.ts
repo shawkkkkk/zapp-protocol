@@ -22,6 +22,20 @@ import {
   getAssociatedTokenAddressSync,
   getMint,
 } from "@solana/spl-token";
+import {
+  createV1,
+  mplTokenMetadata,
+  TokenStandard,
+} from "@metaplex-foundation/mpl-token-metadata";
+import {
+  createNoopSigner,
+  percentAmount,
+} from "@metaplex-foundation/umi";
+import { createUmi } from "@metaplex-foundation/umi-bundle-defaults";
+import {
+  fromWeb3JsPublicKey,
+  toWeb3JsInstruction,
+} from "@metaplex-foundation/umi-web3js-adapters";
 import { buildZAppMemo, parseUiAmount } from "../protocol.ts";
 
 const MEMO_PROGRAM_ID = new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
@@ -40,6 +54,52 @@ export function browserSolanaRpc(): string {
 export function getInjectedWallet(): WalletProvider | null {
   if (typeof window === "undefined") return null;
   return (window as unknown as { solana?: WalletProvider }).solana ?? null;
+}
+
+
+function metaplexMetadataInstruction(input: {
+  owner: PublicKey;
+  mint: PublicKey;
+  name: string;
+  symbol: string;
+  uri: string;
+  decimals: number;
+}): TransactionInstruction {
+  if (!input.name.trim() || input.name.trim().length > 32) {
+    throw new Error("On-chain token name must be 1-32 characters");
+  }
+  if (!input.symbol.trim() || input.symbol.trim().length > 10) {
+    throw new Error("On-chain token ticker must be 1-10 characters");
+  }
+  if (input.uri.length > 200) throw new Error("Token metadata URI is too long");
+
+  const umi = createUmi(browserSolanaRpc()).use(mplTokenMetadata());
+  const authority = createNoopSigner(fromWeb3JsPublicKey(input.owner));
+  const builder = createV1(umi, {
+    mint: fromWeb3JsPublicKey(input.mint),
+    authority,
+    payer: authority,
+    updateAuthority: authority,
+    name: input.name.trim(),
+    symbol: input.symbol.trim().toUpperCase(),
+    uri: input.uri,
+    sellerFeeBasisPoints: percentAmount(0),
+    tokenStandard: TokenStandard.Fungible,
+    splTokenProgram: fromWeb3JsPublicKey(TOKEN_PROGRAM_ID),
+    decimals: input.decimals,
+    creators: null,
+    collection: null,
+    uses: null,
+    collectionDetails: null,
+    ruleSet: null,
+    printSupply: null,
+    isMutable: false,
+  });
+  const instructions = builder.getInstructions();
+  if (instructions.length !== 1) {
+    throw new Error("Unexpected Metaplex metadata instruction count");
+  }
+  return toWeb3JsInstruction(instructions[0]);
 }
 
 async function tokenProgramForMint(connection: Connection, mint: PublicKey): Promise<PublicKey> {
@@ -106,7 +166,10 @@ export async function buildFixedSupplyMintTransaction(input: {
   owner: PublicKey;
   supplyUi: string;
   decimals: number;
-}): Promise<{ transaction: Transaction; mintKeypair: Keypair; mint: string; amountBaseUnits: bigint }> {
+  name: string;
+  symbol: string;
+  metadataOrigin: string;
+}): Promise<{ transaction: Transaction; mintKeypair: Keypair; mint: string; amountBaseUnits: bigint; metadataUri: string }> {
   if (!Number.isInteger(input.decimals) || input.decimals < 0 || input.decimals > 9) {
     throw new Error("ZApp's simple token creator supports 0-9 decimals");
   }
@@ -116,6 +179,19 @@ export async function buildFixedSupplyMintTransaction(input: {
   const amountBaseUnits = parseUiAmount(input.supplyUi, input.decimals);
   const rent = await connection.getMinimumBalanceForRentExemption(MINT_SIZE);
   const ata = getAssociatedTokenAddressSync(mintKeypair.publicKey, input.owner);
+  const origin = input.metadataOrigin.replace(/\/$/, "");
+  if (!/^https:\/\//i.test(origin) && !/^http:\/\/localhost(?::\d+)?$/i.test(origin)) {
+    throw new Error("Token metadata origin must be HTTPS");
+  }
+  const metadataUri = origin + "/api/metadata/" + mintKeypair.publicKey.toBase58();
+  const metadataIx = metaplexMetadataInstruction({
+    owner: input.owner,
+    mint: mintKeypair.publicKey,
+    name: input.name,
+    symbol: input.symbol,
+    uri: metadataUri,
+    decimals: input.decimals,
+  });
 
   const transaction = new Transaction().add(
     SystemProgram.createAccount({
@@ -126,6 +202,7 @@ export async function buildFixedSupplyMintTransaction(input: {
       programId: TOKEN_PROGRAM_ID,
     }),
     createInitializeMint2Instruction(mintKeypair.publicKey, input.decimals, input.owner, null),
+    metadataIx,
     createAssociatedTokenAccountInstruction(input.owner, ata, input.owner, mintKeypair.publicKey),
     createMintToCheckedInstruction(
       mintKeypair.publicKey,
@@ -152,5 +229,6 @@ export async function buildFixedSupplyMintTransaction(input: {
     mintKeypair,
     mint: mintKeypair.publicKey.toBase58(),
     amountBaseUnits,
+    metadataUri,
   };
 }
