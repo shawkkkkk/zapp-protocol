@@ -22,3 +22,10 @@ CREATE TABLE IF NOT EXISTS transfers (
 
 CREATE INDEX IF NOT EXISTS transfers_burn_idx
   ON transfers (burn_id, zcash_height, zcash_tx_index);
+
+UPDATE claims
+SET current_owner = recipient,
+    owner_txid = zcash_txid,
+    owner_vout = recipient_vout
+WHERE status = 'confirmed'
+  AND current_owner IS NULL;
