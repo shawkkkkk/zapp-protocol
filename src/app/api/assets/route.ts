@@ -49,6 +49,9 @@ export async function POST(request: NextRequest) {
       typeof body.description === "string" && body.description.trim()
         ? body.description.trim().slice(0, 500)
         : null;
+    const imageUrl = sanitizePublicUrl(body.imageUrl);
+    const websiteUrl = sanitizePublicUrl(body.websiteUrl);
+    const xUrl = sanitizePublicUrl(body.xUrl);
 
     verifyLaunchAuthorization({
       mint,
@@ -57,10 +60,10 @@ export async function POST(request: NextRequest) {
       registrationSignature,
       name,
       symbol,
-      imageUrl: typeof body.imageUrl === "string" ? body.imageUrl : null,
+      imageUrl,
       description,
-      websiteUrl: typeof body.websiteUrl === "string" ? body.websiteUrl : null,
-      xUrl: typeof body.xUrl === "string" ? body.xUrl : null,
+      websiteUrl,
+      xUrl,
     });
     const verified = await verifyLaunchRegistration({ creationSignature, mint, creator });
     const asset = await upsertAsset({
@@ -69,9 +72,9 @@ export async function POST(request: NextRequest) {
       name,
       symbol,
       description,
-      imageUrl: sanitizePublicUrl(body.imageUrl),
-      websiteUrl: sanitizePublicUrl(body.websiteUrl),
-      xUrl: sanitizePublicUrl(body.xUrl),
+      imageUrl,
+      websiteUrl,
+      xUrl,
       tokenProgram: verified.tokenProgram,
       decimals: verified.decimals,
       launchSlot: verified.launchSlot,
