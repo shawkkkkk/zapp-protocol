@@ -31,10 +31,12 @@ export function Launchpad({
   initialMint = "",
   initialSymbol = "",
   hideCreator = false,
+  minimumBurnLabel = "",
 }: {
   initialMint?: string;
   initialSymbol?: string;
   hideCreator?: boolean;
+  minimumBurnLabel?: string;
 }) {
   const [wallet, setWallet] = useState("");
   const [mint, setMint] = useState(initialMint);
@@ -316,7 +318,15 @@ export function Launchpad({
         </label>
         <label>
           <span>Amount to destroy</span>
-          <input value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="1000000" inputMode="decimal" />
+          <input
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder={minimumBurnLabel || "Amount"}
+            inputMode="decimal"
+          />
+          {minimumBurnLabel && (
+            <small>Minimum for one Zcash NFT: {minimumBurnLabel} {initialSymbol ? "$" + initialSymbol : "tokens"}.</small>
+          )}
         </label>
         <label>
           <span>Zcash NFT destination</span>
