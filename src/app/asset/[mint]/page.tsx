@@ -27,6 +27,7 @@ export default async function AssetPage({
 
   const stats = await getAssetStats(mint);
   const burned = formatBaseUnits(stats.burned_base_units, asset.decimals);
+  const minimumBurn = formatBaseUnits(asset.min_burn_base_units, asset.decimals);
 
   return (
     <main>
@@ -109,12 +110,12 @@ export default async function AssetPage({
           <code>{asset.token_program}</code>
         </div>
         <div>
-          <span>Decimals</span>
-          <b>{asset.decimals}</b>
+          <span>Minimum burn</span>
+          <b>{minimumBurn}</b>
         </div>
         <div>
-          <span>Launch slot</span>
-          <b>{asset.launch_slot}</b>
+          <span>Decimals</span>
+          <b>{asset.decimals}</b>
         </div>
       </section>
 
@@ -122,6 +123,7 @@ export default async function AssetPage({
         initialMint={asset.mint}
         initialSymbol={asset.symbol}
         hideCreator
+        minimumBurnLabel={minimumBurn}
       />
     </main>
   );
