@@ -644,13 +644,14 @@ export type PublicNftRow = NftMintRow & {
   current_owner: string | null;
   symbol: string | null;
   name: string | null;
+  decimals: number | null;
 };
 
 export async function listNftMints(limit = 50): Promise<PublicNftRow[]> {
   const safeLimit = Math.max(1, Math.min(limit, 200));
   const result = await database().query<PublicNftRow>(
     `SELECT n.*, c.mint, c.amount_base_units, c.recipient, c.current_owner,
-            a.symbol, a.name
+            a.symbol, a.name, a.decimals
      FROM nft_mints n
      JOIN claims c ON c.burn_id=n.burn_id
      LEFT JOIN assets a ON a.mint=c.mint
