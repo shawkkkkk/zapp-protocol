@@ -322,7 +322,7 @@ async function syncOnce(): Promise<void> {
   const last = await reconcileReorg(startHeight);
   const confirmations = Math.max(
     1,
-    Number.parseInt(process.env.ZCASH_MIN_CONFIRMATIONS || "1", 10),
+    Number.parseInt(process.env.ZCASH_MIN_CONFIRMATIONS || "2", 10),
   );
   const safeTip = tip - (confirmations - 1);
 
