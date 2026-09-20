@@ -518,6 +518,8 @@ export type NftMintRow = {
   reveal_txid: string | null;
   reveal_raw_hex: string | null;
   inscription_id: string | null;
+  indexer_verified_at: string | null;
+  indexer_verified_height: string | null;
   attempts: number;
   error: string | null;
   updated_at: string;
@@ -545,6 +547,25 @@ export async function queueNftMint(input: {
 export async function getNftMint(burnId: string): Promise<NftMintRow | null> {
   const result = await database().query<NftMintRow>("SELECT * FROM nft_mints WHERE burn_id=$1", [burnId]);
   return result.rows[0] || null;
+}
+
+
+export async function markNftIndexerVerified(input: {
+  burnId: string;
+  revealTxid: string;
+  zcashHeight: number;
+}): Promise<boolean> {
+  const result = await database().query(
+    `UPDATE nft_mints
+     SET indexer_verified_at=NOW(),
+         indexer_verified_height=$3,
+         updated_at=NOW()
+     WHERE burn_id=$1
+       AND reveal_txid=$2
+     RETURNING burn_id`,
+    [input.burnId, input.revealTxid, input.zcashHeight],
+  );
+  return result.rowCount === 1;
 }
 
 export async function acquireNextNftMint(): Promise<NftMintRow | null> {
