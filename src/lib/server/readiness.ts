@@ -31,11 +31,38 @@ export async function readinessChecks(): Promise<ReadinessCheck[]> {
 
   try {
     const db = database();
-    const schema = await db.query<{ claims: string | null; nfts: string | null; assets: string | null }>(
-      "SELECT to_regclass('public.claims')::text AS claims, to_regclass('public.nft_mints')::text AS nfts, to_regclass('public.assets')::text AS assets",
+    const schema = await db.query<{
+      claims: string | null;
+      nfts: string | null;
+      assets: string | null;
+      images: string | null;
+      rate_limits: string | null;
+      min_burn_column: string | null;
+    }>(
+      `SELECT
+         to_regclass('public.claims')::text AS claims,
+         to_regclass('public.nft_mints')::text AS nfts,
+         to_regclass('public.assets')::text AS assets,
+         to_regclass('public.launch_images')::text AS images,
+         to_regclass('public.api_rate_limits')::text AS rate_limits,
+         (
+           SELECT column_name
+           FROM information_schema.columns
+           WHERE table_schema='public'
+             AND table_name='assets'
+             AND column_name='min_burn_base_units'
+           LIMIT 1
+         ) AS min_burn_column`,
     );
     const row = schema.rows[0];
-    const ok = Boolean(row?.claims && row?.nfts && row?.assets);
+    const ok = Boolean(
+      row?.claims &&
+      row?.nfts &&
+      row?.assets &&
+      row?.images &&
+      row?.rate_limits &&
+      row?.min_burn_column
+    );
     checks.push({
       ok,
       name: "database",
@@ -120,6 +147,27 @@ export async function readinessChecks(): Promise<ReadinessCheck[]> {
     }
   } catch (error) {
     checks.push({ ok: false, name: "nft-worker", detail: error instanceof Error ? error.message : "worker health unavailable" });
+  }
+
+  try {
+    const health = await getServiceHealth("zcash-indexer");
+    if (!health) {
+      checks.push({ ok: false, name: "zcash-indexer", detail: "no indexer heartbeat recorded" });
+    } else {
+      const ageMs = Date.now() - new Date(health.heartbeat_at).getTime();
+      const fresh = ageMs >= 0 && ageMs <= 90_000;
+      checks.push({
+        ok: fresh && health.status === "ready",
+        name: "zcash-indexer",
+        detail: fresh ? health.status + (health.details ? ": " + health.details : "") : "indexer heartbeat is stale",
+      });
+    }
+  } catch (error) {
+    checks.push({
+      ok: false,
+      name: "zcash-indexer",
+      detail: error instanceof Error ? error.message : "indexer health unavailable",
+    });
   }
 
   try {
