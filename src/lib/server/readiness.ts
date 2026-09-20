@@ -31,6 +31,12 @@ export async function readinessChecks(): Promise<ReadinessCheck[]> {
 
   const publicGate = process.env.ZAPP_PUBLIC_LAUNCH_ENABLED === "true";
   const canaryAccess = process.env.ZAPP_CANARY_ENABLED === "true";
+  const nftMintEnabled = process.env.ZAPP_NFT_MINT_ENABLED !== "false";
+  checks.push({
+    ok: nftMintEnabled,
+    name: "nft-mint-switch",
+    detail: nftMintEnabled ? "NFT minting enabled" : "NFT minting is administratively paused",
+  });
   checks.push({
     ok: !publicGate || !canaryAccess,
     name: "canary-access",
