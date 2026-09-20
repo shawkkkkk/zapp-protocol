@@ -60,3 +60,25 @@ for a valid Zcash proof without the official relay.
 ZApp cannot make ZIP-226/227 active on Zcash mainnet. It cannot make today's proofs native
 shielded assets. Future migration depends on the consensus rules that actually ship and on
 the migration mechanism adopted at that time.
+
+## Relay disappears after a burn
+
+**Attack/failure:** the official relay stops after the Solana burn finalizes.
+
+**Result:** availability is degraded, but the burn is not protocol-orphaned. Any party can
+reconstruct the exact Proof and relay it to the immutable burner-selected destination.
+
+## Fake ownership transfer
+
+**Attack:** publish a transfer payload without controlling the current marker.
+
+**Result:** invalid. The transfer transaction must spend the currently indexed marker
+outpoint and create exactly one replacement marker.
+
+## Divergent indexer
+
+**Attack/failure:** an RPC is pruned, censored, or an indexer has a bug.
+
+**Result:** independently operated indexers publish the indexed Zcash block hash plus the
+canonical ZApp state root. A mismatch is detectable rather than silently becoming protocol
+truth.
