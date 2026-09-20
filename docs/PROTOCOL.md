@@ -5,8 +5,10 @@ ZIP-226/227 assets exist on current Zcash mainnet.
 
 ## Goal
 
-Create a public, deterministic relationship between an irreversible Solana token burn and
-a compact proof anchored in a standard transparent Zcash mainnet transaction.
+Provide a public asset-launchpad workaround before native Zcash custom assets exist:
+a finalized Solana token burn produces a collectible Zcash inscription/NFT. The NFT reveal
+also carries a compact ZApp proof so its mint, amount and destination can be independently
+reconstructed from both chains.
 
 ## Source event
 
@@ -59,10 +61,10 @@ A v1 claim payload is exactly 78 bytes:
 The payload is carried in an `OP_RETURN` output. Because it is 78 bytes, the script uses
 `OP_RETURN OP_PUSHDATA1 0x4e <payload>`.
 
-The same Zcash transaction MUST contain exactly one marker output of
-`ZCASH_MARKER_ZATS` (1000 zatoshis by default) to the destination committed in the Solana
-memo. The marker is not the token. It makes the destination independently visible and
-machine-checkable.
+For the public NFT flow, the claim payload is carried by the inscription reveal transaction.
+That same reveal MUST create output 0 with `ZCASH_MARKER_ZATS` (546 zatoshis by default)
+to the destination committed in the Solana memo. Output 0 is the inscription's carrying
+output and initial ownership outpoint.
 
 ## Canonical validity
 
@@ -96,30 +98,34 @@ proof state above the common ancestor is invalidated and replayed.
 Unknown versions or operations MUST be ignored, not guessed. A future protocol version may
 add proof transfer/splitting or native-ZSA migration without changing v1 history.
 
-## Ownership transfers
+## NFT ownership
 
-A confirmed ZApp Proof has an ownership marker: the exact marker output created by its
-claim transaction. Initial ownership is the destination committed in the Solana burn.
+Initial ownership is output 0 of the completed inscription reveal.
 
-A v1 ownership transfer is valid only when a Zcash transaction:
+After that, ownership follows the Zcash inscription carrying-output rule rather than requiring
+a ZApp-aware wallet:
 
-1. spends the current canonical marker outpoint;
-2. contains exactly one ZApp transfer payload;
-3. that payload names the Proof's 32-byte burn ID; and
-4. creates exactly one marker-value output to the new transparent owner.
+1. when the current carrying output is spent, scan the spending transaction's outputs in
+   output-index order;
+2. the first transparent, non-data output becomes the new carrying output;
+3. its transparent address becomes the current owner; and
+4. if no transparent non-data successor exists, ownership becomes terminal and is never
+   guessed from later activity.
 
-Transfer payload:
+This means an ordinary transparent Zcash transfer can move a ZApp NFT. A wallet does not
+need to add a special ZApp payload for the indexer to follow it.
+
+ZApp operation 2 remains available as optional transfer metadata for ZApp-aware tooling:
 
 | Offset | Bytes | Meaning |
 |---|---:|---|
 | 0 | 4 | ASCII `ZAPP` |
 | 4 | 1 | version = 1 |
-| 5 | 1 | operation = 2 (transfer) |
+| 5 | 1 | operation = 2 (transfer annotation) |
 | 6 | 32 | burn ID |
 
-The indexer processes transfers in Zcash chain order. A transaction that does not spend the
-current marker cannot change ownership. This makes ownership reconstructible after any
-number of transfers rather than permanently equating ownership with the first recipient.
+The indexer journals transfers and terminal spends by block height/hash and rolls them back
+during reorg recovery.
 
 ## Operator independence and rescue
 
@@ -135,8 +141,8 @@ pay to deliver the correct Proof to the burner-selected destination; they cannot
 An indexer publishes a SHA-256 state root over all confirmed Proofs ordered by burn ID.
 Each row commits to:
 
-`burn_id | mint | amount_base_units | current_owner | owner_txid | owner_vout`
+`burn_id | mint | amount_base_units | current_owner | owner_txid | owner_vout | ownership_state`
 
 prefixed by the domain string `ZAPP_STATE_V1\n`. Two independent indexers at the same
-Zcash block hash should publish the same root, proof count and aggregate base-unit amount.
+Zcash block hash should publish the same root, proof count and per-mint base-unit totals.
 A mismatch is an auditable signal that one indexer has incomplete or divergent chain data.
