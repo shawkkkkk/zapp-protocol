@@ -1,0 +1,20 @@
+FROM rust:1.88-bookworm AS signer
+WORKDIR /src
+COPY native/zapp-zcash-signer ./native/zapp-zcash-signer
+RUN cargo build --release --manifest-path native/zapp-zcash-signer/Cargo.toml
+
+FROM node:22-bookworm-slim AS deps
+WORKDIR /app
+COPY package.json ./
+RUN npm install --omit=dev
+
+FROM node:22-bookworm-slim
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json ./
+COPY scripts ./scripts
+COPY src ./src
+COPY --from=signer /src/native/zapp-zcash-signer/target/release/zapp-zcash-signer /usr/local/bin/zapp-zcash-signer
+ENV ZAPP_INSCRIPTION_SIGNER_BIN=/usr/local/bin/zapp-zcash-signer
+CMD ["node","--experimental-strip-types","scripts/nft-worker.ts","--watch"]
