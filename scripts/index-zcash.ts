@@ -2,8 +2,9 @@ import {
   applyIndexedTransfer,
   database,
   confirmIndexedClaim,
-  getClaim,
+  getClaimByOwnerOutpoint,
   rebuildOwnershipFromTransfers,
+  terminateIndexedOwnership,
 } from "../src/lib/server/db.ts";
 import { decodeClaimPayload, hexToBytes } from "../src/lib/protocol.ts";
 import { findBurnRawByCommitment } from "../src/lib/server/solana-raw.ts";
@@ -19,7 +20,7 @@ import {
 const STATE = "zcash-mainnet-v1";
 
 function markerZats(): bigint {
-  return BigInt(process.env.ZCASH_MARKER_ZATS || "1000");
+  return BigInt(process.env.ZCASH_MARKER_ZATS || "546");
 }
 
 async function reconcileReorg(startHeight: number): Promise<number> {
@@ -50,6 +51,7 @@ async function reconcileReorg(startHeight: number): Promise<number> {
       [height],
     );
     await client.query("DELETE FROM transfers WHERE zcash_height > $1", [height]);
+    await client.query("DELETE FROM ownership_terminals WHERE zcash_height > $1", [height]);
     await client.query("DELETE FROM zcash_blocks WHERE height > $1", [height]);
     if (height >= startHeight) {
       const hash = await getZcashBlockHash(height);
@@ -86,48 +88,56 @@ function recipientMarkerVout(
 
 
 function transferDestination(
-  tx: { vout: Array<{ n: number; valueZat?: number; scriptPubKey: { addresses?: string[] } }> },
+  tx: { vout: Array<{ n: number; scriptPubKey: { addresses?: string[] } }> },
 ): { owner: string; vout: number } | null {
   const candidates = tx.vout
-    .filter((vout) => BigInt(vout.valueZat ?? -1) === markerZats())
+    .slice()
+    .sort((a, b) => a.n - b.n)
     .map((vout) => ({ vout: vout.n, addresses: vout.scriptPubKey.addresses || [] }))
-    .filter((row) => row.addresses.length === 1);
-  if (candidates.length !== 1) return null;
-  const owner = candidates[0].addresses[0];
-  if (!/^t[13]/.test(owner)) return null;
-  return { owner, vout: candidates[0].vout };
+    .filter((row) => row.addresses.length === 1 && /^t[13]/.test(row.addresses[0]));
+
+  if (!candidates.length) return null;
+  return { owner: candidates[0].addresses[0], vout: candidates[0].vout };
 }
 
-async function indexTransfer(
+async function indexTransfers(
   tx: Awaited<ReturnType<typeof getZcashBlock>>["tx"][number],
   height: number,
   txIndex: number,
 ): Promise<void> {
-  const payloads = findTransferPayloads(tx);
-  if (payloads.length !== 1) return;
-  const payload = payloads[0];
-  const claim = await getClaim(payload.burnId);
-  if (!claim || claim.status !== "confirmed" || !claim.owner_txid || claim.owner_vout === null) return;
+  const explicit = findTransferPayloads(tx);
 
-  const spendsCurrentMarker = (tx.vin || []).some(
-    (vin) => vin.txid === claim.owner_txid && vin.vout === claim.owner_vout,
-  );
-  if (!spendsCurrentMarker) return;
+  for (const vin of tx.vin || []) {
+    if (!vin.txid || vin.vout === undefined) continue;
+    const claim = await getClaimByOwnerOutpoint(vin.txid, vin.vout);
+    if (!claim) continue;
 
-  const destination = transferDestination(tx);
-  if (!destination) return;
+    const destination = transferDestination(tx);
+    if (!destination) {
+      await terminateIndexedOwnership({
+        burnId: claim.burn_id,
+        txid: tx.txid,
+        zcashHeight: height,
+        zcashTxIndex: txIndex,
+        fromTxid: vin.txid,
+        fromVout: vin.vout,
+      });
+      continue;
+    }
 
-  await applyIndexedTransfer({
-    burnId: payload.burnId,
-    txid: tx.txid,
-    zcashHeight: height,
-    zcashTxIndex: txIndex,
-    fromTxid: claim.owner_txid,
-    fromVout: claim.owner_vout,
-    toOwner: destination.owner,
-    toVout: destination.vout,
-    payloadVout: payload.vout,
-  });
+    const matchingPayload = explicit.find((payload) => payload.burnId === claim.burn_id);
+    await applyIndexedTransfer({
+      burnId: claim.burn_id,
+      txid: tx.txid,
+      zcashHeight: height,
+      zcashTxIndex: txIndex,
+      fromTxid: vin.txid,
+      fromVout: vin.vout,
+      toOwner: destination.owner,
+      toVout: destination.vout,
+      payloadVout: matchingPayload?.vout ?? null,
+    });
+  }
 }
 
 async function indexBlock(height: number): Promise<void> {
@@ -170,7 +180,7 @@ async function indexBlock(height: number): Promise<void> {
   // Apply ownership transfers only after all claim candidates in the block have
   // had a chance to become canonical. Transactions remain processed in chain order.
   for (let txIndex = 0; txIndex < block.tx.length; txIndex += 1) {
-    await indexTransfer(block.tx[txIndex], height, txIndex);
+    await indexTransfers(block.tx[txIndex], height, txIndex);
   }
 
   const client = await db.connect();
