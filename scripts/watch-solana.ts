@@ -168,6 +168,17 @@ async function main() {
 
   do {
     try {
+      if (process.env.ZAPP_NFT_MINT_ENABLED === "false") {
+        await heartbeatService(
+          "solana-watcher",
+          "paused",
+          "NFT mint kill switch is off; burn cursor is not advancing",
+        );
+        if (!watch) break;
+        await new Promise((resolve) => setTimeout(resolve, 10_000));
+        continue;
+      }
+
       const processed = await syncOnce();
       await heartbeatService(
         "solana-watcher",
