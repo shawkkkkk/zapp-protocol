@@ -54,6 +54,7 @@ test("claim scanner ignores unrelated OP_RETURN data", () => {
   const unrelated = "6a026869";
   const found = findClaimPayloads({
     txid: "00".repeat(32),
+    vin: [],
     vout: [
       { n: 0, valueZat: 0, scriptPubKey: { hex: unrelated } },
       { n: 1, valueZat: 0, scriptPubKey: { hex: proofScript } },
