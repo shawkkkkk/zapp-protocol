@@ -1,3 +1,4 @@
+import { AssetGrid } from "@/components/AssetGrid";
 import { Launchpad } from "@/components/Launchpad";
 
 export default function Home() {
@@ -6,85 +7,78 @@ export default function Home() {
       <nav className="nav shell">
         <a className="brand" href="/">ZApp</a>
         <div className="navlinks">
+          <a href="#launches">Launches</a>
           <a href="#how">How it works</a>
-          <a href="#proofs">Proofs</a>
+          <a href="/explorer">Explorer</a>
           <a href="https://github.com/shawkkkkk/zapp-protocol" target="_blank" rel="noreferrer">GitHub</a>
         </div>
       </nav>
 
       <section className="hero shell">
-        <div className="eyebrow">ZCASH MAINNET × SOLANA</div>
-        <h1>Assets on Zcash.<br /><span>Before ZSAs.</span></h1>
+        <div className="eyebrow">ZCASH ASSET LAUNCHPAD</div>
+        <h1>Launch before<br /><span>ZSAs exist.</span></h1>
         <p className="lede">
-          Burn a real SPL token on Solana. ZApp verifies the destruction and anchors a
-          compact proof to a real Zcash mainnet transaction.
+          Create an SPL asset, let holders burn it on Solana, and deliver a collectible
+          inscription/NFT to their chosen Zcash mainnet address.
         </p>
         <div className="truthbar">
-          <span>Real SPL burn</span>
-          <span>Real Zcash transaction</span>
-          <span>No fake ZSA claims</span>
+          <span>Real token burn</span>
+          <span>Real Zcash NFT</span>
+          <span>Publicly verifiable</span>
         </div>
       </section>
 
       <Launchpad />
 
+      <section id="launches" className="section shell">
+        <div className="sectionhead">
+          <div className="eyebrow">LIVE LAUNCHES</div>
+          <h2>Assets migrating into Zcash</h2>
+          <p>Each launch is tied to a finalized SPL mint transaction with revoked mint authority.</p>
+        </div>
+        <AssetGrid />
+      </section>
+
       <section id="how" className="section shell">
         <div className="sectionhead">
-          <div className="eyebrow">THE RULES ARE THE PRODUCT</div>
-          <h2>Anyone can write data. Only valid proofs count.</h2>
+          <div className="eyebrow">HOW ZAPP WORKS</div>
+          <h2>The workaround is the product.</h2>
         </div>
         <div className="grid3">
           <article className="card">
             <div className="step">01</div>
-            <h3>Destroy</h3>
-            <p>A single Solana transaction burns tokens with BurnChecked and commits your Zcash t-address in a ZAPP1 memo.</p>
+            <h3>Launch</h3>
+            <p>Create a fixed-supply SPL token through ZApp or enter a verified public ZApp launch.</p>
           </article>
           <article className="card">
             <div className="step">02</div>
-            <h3>Verify</h3>
-            <p>ZApp requires finality, one burn, one destination, an exact mint, and exact uint64 base-unit accounting.</p>
+            <h3>Burn</h3>
+            <p>Holders destroy tokens on Solana and commit their Zcash destination in the same finalized transaction.</p>
           </article>
           <article className="card">
             <div className="step">03</div>
-            <h3>Prove</h3>
-            <p>A 78-byte ZApp Proof is placed in OP_RETURN beside a marker output to the destination committed on Solana.</p>
+            <h3>Claim</h3>
+            <p>ZApp verifies the burn and mints the corresponding collectible inscription/NFT to that Zcash address.</p>
           </article>
         </div>
       </section>
 
       <section className="section shell statement">
         <div>
-          <div className="eyebrow">WHAT ZAPP IS — AND ISN'T</div>
-          <h2>No quotation-mark engineering.</h2>
+          <div className="eyebrow">HONEST BY DESIGN</div>
+          <h2>Real NFT now. Native asset later.</h2>
         </div>
         <p>
-          A ZApp Proof is an overlay-protocol record anchored to Zcash mainnet. It is not
-          a native Zcash Shielded Asset. Future ZSA migration is a versioned policy, not a
-          present-day consensus guarantee.
+          ZApp NFTs are public Zcash inscriptions representing verified destruction of SPL tokens.
+          They are not native shielded assets today. If compatible ZSAs activate later, canonical NFT
+          ownership and burn amounts are the intended migration basis under a separately versioned policy.
         </p>
-      </section>
-
-      <section id="proofs" className="section shell">
-        <div className="sectionhead">
-          <div className="eyebrow">PUBLIC LEDGER</div>
-          <h2>Recent ZApp Proofs</h2>
-        </div>
-        <RecentProofs />
       </section>
 
       <footer className="footer shell">
         <span>ZApp Protocol v1</span>
-        <span>Solana burn → Zcash proof</span>
+        <span>Solana burn → Zcash NFT</span>
       </footer>
     </main>
-  );
-}
-
-async function RecentProofs() {
-  return (
-    <div className="proof-placeholder">
-      <p>The explorer populates from the canonical indexer once DATABASE_URL and the mainnet indexer are running.</p>
-      <a className="textlink" href="/explorer">Open explorer →</a>
-    </div>
   );
 }
