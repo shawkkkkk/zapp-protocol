@@ -71,7 +71,7 @@ export type DecodedTx = {
 };
 
 function markerZats(): bigint {
-  const value = BigInt(process.env.ZCASH_MARKER_ZATS || "1000");
+  const value = BigInt(process.env.ZCASH_MARKER_ZATS || "546");
   if (value <= 0n || value > 100_000_000n) {
     throw new Error("ZCASH_MARKER_ZATS must be 1..100000000");
   }
