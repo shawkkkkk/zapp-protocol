@@ -5,6 +5,7 @@ import {
   decodeTransferPayload,
   encodeClaimPayload,
   encodeOpReturnScript,
+  encodeTransferPayload,
 } from "../protocol.ts";
 import { assertMainnetTransparentAddress } from "./crypto.ts";
 import type { BurnEvidence } from "../validation.ts";
@@ -255,6 +256,94 @@ export async function broadcastProof(
     throw new Error("Zcash node returned an invalid transaction id");
   }
 
+  return { txid, payloadHex, ...positions };
+}
+
+
+function assertTransactionCarriesTransfer(
+  decoded: DecodedTx,
+  input: { burnId: string; fromTxid: string; fromVout: number; toOwner: string; payloadHex: string },
+): { recipientVout: number; carrierVout: number } {
+  const carriers = findTransferPayloads(decoded).filter(
+    (item) => item.burnId === input.burnId && item.payloadHex === input.payloadHex,
+  );
+  if (carriers.length !== 1) throw new Error("Transfer must contain exactly one matching ZApp transfer payload");
+
+  const spendsMarker = (decoded.vin || []).some(
+    (vin) => vin.txid === input.fromTxid && vin.vout === input.fromVout,
+  );
+  if (!spendsMarker) throw new Error("Transfer no longer spends the current ZApp marker output");
+
+  const recipients = decoded.vout.filter(
+    (output) =>
+      (output.scriptPubKey.addresses || []).includes(input.toOwner) &&
+      BigInt(output.valueZat ?? -1) === markerZats(),
+  );
+  if (recipients.length !== 1) throw new Error("Transfer must create exactly one marker output for the new owner");
+  return { recipientVout: recipients[0].n, carrierVout: carriers[0].vout };
+}
+
+export async function broadcastTransfer(
+  input: { burnId: string; fromTxid: string; fromVout: number; toOwner: string },
+  rpc = new ZcashRpc(),
+): Promise<{ txid: string; payloadHex: string; recipientVout: number; carrierVout: number }> {
+  assertMainnetTransparentAddress(input.toOwner);
+  if (!/^[0-9a-f]{64}$/i.test(input.burnId) || !/^[0-9a-f]{64}$/i.test(input.fromTxid)) {
+    throw new Error("Invalid ZApp transfer identifiers");
+  }
+
+  const chain = await rpc.call<{ chain?: string }>("getblockchaininfo");
+  if (chain.chain && chain.chain !== "main") throw new Error("Refusing to transfer a mainnet ZApp Proof off mainnet");
+
+  const payloadHex = bytesToHex(encodeTransferPayload({ burnId: input.burnId }));
+  const placeholder = await rpc.call<{ p2sh?: string }>("decodescript", ["51"]);
+  if (!placeholder.p2sh) throw new Error("Zcash node did not return a carrier placeholder");
+
+  const markerZec = Number(markerZats()) / 100_000_000;
+  const raw = await rpc.call<string>("createrawtransaction", [
+    [{ txid: input.fromTxid, vout: input.fromVout }],
+    { [input.toOwner]: markerZec, [placeholder.p2sh]: 0 },
+  ]);
+
+  const decodedPlaceholder = await rpc.call<DecodedTx>("decoderawtransaction", [raw]);
+  const placeholderOutputs = decodedPlaceholder.vout.filter(
+    (output) =>
+      (output.scriptPubKey.addresses || []).includes(placeholder.p2sh as string) &&
+      BigInt(output.valueZat ?? -1) === 0n,
+  );
+  if (placeholderOutputs.length !== 1) throw new Error("Transfer carrier placeholder is not unique");
+
+  const scriptHex = bytesToHex(
+    encodeOpReturnScript(Uint8Array.from(Buffer.from(payloadHex, "hex"))),
+  );
+  const mutated = replaceZeroValueOutputScript(
+    raw,
+    placeholderOutputs[0].scriptPubKey.hex,
+    scriptHex,
+  );
+  assertTransactionCarriesTransfer(
+    await rpc.call<DecodedTx>("decoderawtransaction", [mutated]),
+    { ...input, payloadHex },
+  );
+
+  const funded = await rpc.call<{ hex: string }>("fundrawtransaction", [mutated]);
+  const positions = assertTransactionCarriesTransfer(
+    await rpc.call<DecodedTx>("decoderawtransaction", [funded.hex]),
+    { ...input, payloadHex },
+  );
+
+  const signed = await rpc.call<{ hex: string; complete: boolean; errors?: unknown[] }>(
+    "signrawtransaction",
+    [funded.hex],
+  );
+  if (!signed.complete) throw new Error("Wallet cannot sign the current Proof marker input");
+  assertTransactionCarriesTransfer(
+    await rpc.call<DecodedTx>("decoderawtransaction", [signed.hex]),
+    { ...input, payloadHex },
+  );
+
+  const txid = await rpc.call<string>("sendrawtransaction", [signed.hex, false]);
+  if (!/^[0-9a-f]{64}$/i.test(txid)) throw new Error("Zcash node returned an invalid transfer txid");
   return { txid, payloadHex, ...positions };
 }
 
