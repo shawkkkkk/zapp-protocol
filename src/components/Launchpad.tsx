@@ -35,12 +35,15 @@ export function Launchpad({
   initialMint = "",
   initialSymbol = "",
   minimumBurnLabel = "",
+  forceEnabled = false,
 }: {
   initialMint?: string;
   initialSymbol?: string;
   hideCreator?: boolean;
   minimumBurnLabel?: string;
+  forceEnabled?: boolean;
 }) {
+  const launchEnabled = publicLaunchEnabled || forceEnabled;
   const { publicKey, sendTransaction, wallet } = useUnifiedWallet();
   const [mint, setMint] = useState(initialMint);
   const [amount, setAmount] = useState("");
@@ -114,7 +117,7 @@ export function Launchpad({
 
   async function recoverBurn() {
     setMessage("");
-    if (!publicLaunchEnabled) {
+    if (!launchEnabled) {
       setMessage(
         "ZApp is in preview mode. Public burns and NFT claims are locked until production readiness passes.",
       );
@@ -145,7 +148,7 @@ export function Launchpad({
 
   async function migrate() {
     setMessage("");
-    if (!publicLaunchEnabled) {
+    if (!launchEnabled) {
       setMessage(
         "ZApp is in preview mode. Public burns are locked until production readiness passes.",
       );
@@ -202,7 +205,7 @@ export function Launchpad({
 
   return (
     <section className="launchwrap single shell">
-      {!publicLaunchEnabled && (
+      {!launchEnabled && (
         <div className="launchgate">
           <b>Preview mode</b>
           <span>
@@ -272,7 +275,7 @@ export function Launchpad({
         <button
           className="primary"
           disabled={
-            !publicLaunchEnabled ||
+            !launchEnabled ||
             (stage !== "idle" && stage !== "done")
           }
           onClick={migrate}
@@ -300,7 +303,7 @@ export function Launchpad({
         <button
           className="secondary"
           disabled={
-            !publicLaunchEnabled ||
+            !launchEnabled ||
             (stage !== "idle" && stage !== "done")
           }
           onClick={recoverBurn}
