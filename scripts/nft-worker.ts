@@ -8,7 +8,10 @@ import {
   updateNftMint,
   heartbeatService,
 } from "../src/lib/server/db.ts";
-import { inscriptionDescriptor } from "../src/lib/inscription.ts";
+import {
+  inscriptionDescriptor,
+  estimateRevealZip317FeeZats,
+} from "../src/lib/inscription.ts";
 import { parseNftContent } from "../src/lib/nft.ts";
 import { bytesToHex, encodeOpReturnScript, hexToBytes } from "../src/lib/protocol.ts";
 import {
@@ -20,7 +23,7 @@ import {
 
 const MARKER_ZATS = BigInt(process.env.ZCASH_MARKER_ZATS || "546");
 const POSTAGE_ZATS = BigInt(process.env.ZAPP_NFT_POSTAGE_ZATS || MARKER_ZATS.toString());
-const REVEAL_FEE_ZATS = BigInt(process.env.ZAPP_NFT_REVEAL_FEE_ZATS || "50000");
+const MIN_REVEAL_FEE_ZATS = BigInt(process.env.ZAPP_NFT_REVEAL_FEE_ZATS || "0");
 
 if (POSTAGE_ZATS !== MARKER_ZATS) {
   throw new Error("ZAPP_NFT_POSTAGE_ZATS must equal ZCASH_MARKER_ZATS");
@@ -196,7 +199,20 @@ async function processOne(): Promise<boolean> {
       content: contentBytes,
     });
 
-    const commitValue = POSTAGE_ZATS + REVEAL_FEE_ZATS;
+    const proofScript = bytesToHex(
+      encodeOpReturnScript(hexToBytes(claim.payload_hex)),
+    );
+    const conventionalRevealFee = estimateRevealZip317FeeZats({
+      content: contentBytes,
+      redeemScriptHex: descriptor.redeemScriptHex,
+      proofScriptHex: proofScript,
+      contentType: "application/json",
+    });
+    const revealFee =
+      conventionalRevealFee > MIN_REVEAL_FEE_ZATS
+        ? conventionalRevealFee
+        : MIN_REVEAL_FEE_ZATS;
+    const commitValue = POSTAGE_ZATS + revealFee;
     let commitTxid = job.commit_txid;
     let commitVout = job.commit_vout;
     let commitRawHex = job.commit_raw_hex;
@@ -261,7 +277,6 @@ async function processOne(): Promise<boolean> {
     );
     if (placeholderOutputs.length !== 1) throw new Error("Reveal proof placeholder is not unique");
 
-    const proofScript = bytesToHex(encodeOpReturnScript(hexToBytes(claim.payload_hex)));
     const revealWithProof = replaceZeroValueOutputScript(
       rawReveal,
       placeholderOutputs[0].scriptPubKey.hex,
@@ -287,7 +302,7 @@ async function processOne(): Promise<boolean> {
     const signedReveal = await runSigner({
       raw_tx_hex: revealWithProof,
       prev_script_pubkey_hex: prevScript,
-      prev_value_zats: Number(commitValue),
+      prev_value_zats: commitValue.toString(),
       redeem_script_hex: descriptor.redeemScriptHex,
       content_hex: Buffer.from(contentBytes).toString("hex"),
       content_type: "application/json",
