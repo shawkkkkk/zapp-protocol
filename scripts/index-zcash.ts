@@ -74,14 +74,20 @@ async function reconcileReorg(startHeight: number): Promise<number> {
   return height;
 }
 
+function outputZats(vout: { valueZat?: number; value?: number }): bigint {
+  if (vout.valueZat !== undefined) return BigInt(vout.valueZat);
+  if (vout.value !== undefined) return BigInt(Math.round(vout.value * 100_000_000));
+  return -1n;
+}
+
 function recipientMarkerVout(
-  tx: { vout: Array<{ n: number; valueZat?: number; scriptPubKey: { addresses?: string[] } }> },
+  tx: { vout: Array<{ n: number; valueZat?: number; value?: number; scriptPubKey: { addresses?: string[] } }> },
   recipient: string,
 ): number | null {
   const matches = tx.vout.filter(
     (vout) =>
       (vout.scriptPubKey.addresses || []).includes(recipient) &&
-      BigInt(vout.valueZat ?? -1) === markerZats(),
+      outputZats(vout) === markerZats(),
   );
   return matches.length === 1 ? matches[0].n : null;
 }
