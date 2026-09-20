@@ -118,6 +118,8 @@ Set `ZAPP_ZCASH_START_HEIGHT` to the block immediately before the first producti
 6. The server independently reparses the finalized transaction.
 7. A real Zcash mainnet transaction is constructed, decoded, checked, signed and broadcast.
 8. The chain indexer independently reconstructs it and marks it canonical.
+9. Ownership follows the marker UTXO; later ZAPP transfer transactions can move the Proof
+   while preserving a fully reconstructible ownership lineage.
 
 ### New token
 
@@ -156,3 +158,21 @@ See [docs/MIGRATION_POLICY.md](docs/MIGRATION_POLICY.md).
 ## License
 
 MIT
+
+## Operator independence
+
+The official website is not required for protocol recovery.
+
+```bash
+# Independently relay a finalized burn with your own funded Zcash wallet
+npm run relay:proof -- <solana-signature>
+
+# Transfer a confirmed Proof from the wallet controlling its current marker
+npm run transfer:proof -- <burn-id> <new-zcash-t-address>
+
+# Publish the canonical state commitment for independent comparison
+npm run state:root
+```
+
+The state endpoint (`/api/state`) reports the indexed Zcash height/block hash, Proof count,
+per-mint base-unit totals, and a deterministic state root committing to current ownership.
