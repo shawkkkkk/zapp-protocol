@@ -25,6 +25,8 @@ async function waitForFinalized(signature: string): Promise<void> {
   throw new Error("Solana transaction was not finalized in the expected window. Retry with the same signature.");
 }
 
+const publicLaunchEnabled = process.env.NEXT_PUBLIC_ZAPP_PUBLIC_LAUNCH_ENABLED === "true";
+
 export function Launchpad({
   initialMint = "",
   initialSymbol = "",
@@ -111,6 +113,10 @@ export function Launchpad({
 
   async function recoverBurn() {
     setMessage("");
+    if (!publicLaunchEnabled) {
+      setMessage("ZApp is in preview mode. Public burns and NFT claims are locked until production readiness passes.");
+      return;
+    }
     const signature = recoverySignature.trim();
     if (!signature) {
       setMessage("Paste the finalized Solana burn transaction signature.");
@@ -133,6 +139,10 @@ export function Launchpad({
 
   async function migrate() {
     setMessage("");
+    if (!publicLaunchEnabled) {
+      setMessage("ZApp is in preview mode. Public burns are locked until production readiness passes.");
+      return;
+    }
     setResult({});
     try {
       const provider = getInjectedWallet();
@@ -209,6 +219,10 @@ export function Launchpad({
 
   async function createToken() {
     setMessage("");
+    if (!publicLaunchEnabled) {
+      setMessage("ZApp is in preview mode. Token launches are locked until production readiness passes.");
+      return;
+    }
     try {
       if (!launchName.trim() || !launchSymbol.trim()) throw new Error("Name and ticker are required");
       const provider = getInjectedWallet();
@@ -240,6 +254,10 @@ export function Launchpad({
 
   async function registerExistingToken() {
     setMessage("");
+    if (!publicLaunchEnabled) {
+      setMessage("ZApp is in preview mode. Asset registration is locked until production readiness passes.");
+      return;
+    }
     try {
       if (!existingMint.trim() || !existingCreationSignature.trim()) {
         throw new Error("Existing mint and its creation transaction are required");
@@ -270,6 +288,12 @@ export function Launchpad({
 
   return (
     <section className="launchwrap shell">
+      {!publicLaunchEnabled && (
+        <div className="launchgate">
+          <b>Preview mode</b>
+          <span>UI is live, but irreversible launch/burn actions remain locked until the production preflight passes.</span>
+        </div>
+      )}
       <div className="launchcard">
         <div className="launch-top">
           <div>
@@ -300,7 +324,7 @@ export function Launchpad({
           <small>The destination is committed inside the same Solana transaction as the burn.</small>
         </label>
 
-        <button className="primary" disabled={stage !== "idle" && stage !== "done"} onClick={migrate}>
+        <button className="primary" disabled={!publicLaunchEnabled || (stage !== "idle" && stage !== "done")} onClick={migrate}>
           {buttonText}
         </button>
 
@@ -314,7 +338,7 @@ export function Launchpad({
           />
           <small>Anyone can re-submit a valid finalized ZApp burn. The NFT can only go to the Zcash address committed in that burn.</small>
         </label>
-        <button className="secondary" disabled={stage !== "idle" && stage !== "done"} onClick={recoverBurn}>
+        <button className="secondary" disabled={!publicLaunchEnabled || (stage !== "idle" && stage !== "done")} onClick={recoverBurn}>
           Recover & queue NFT
         </button>
 
@@ -340,13 +364,13 @@ export function Launchpad({
           <label><span>Decimals</span><input value={createDecimals} onChange={(e) => setCreateDecimals(e.target.value)} inputMode="numeric" /></label>
           <label><span>Image URL</span><input value={launchImage} onChange={(e) => setLaunchImage(e.target.value)} placeholder="https://…" /></label>
           <label><span>Description</span><input value={launchDescription} onChange={(e) => setLaunchDescription(e.target.value)} placeholder="What is this launch?" /></label>
-          <button className="secondary" onClick={createToken}>Create & launch</button>
+          <button className="secondary" disabled={!publicLaunchEnabled} onClick={createToken}>Create & launch</button>
           {createdMint && <code className="mintcode">{createdMint}</code>}
 
           <div className="launch-divider"><span>or onboard an existing asset</span></div>
           <label><span>Existing SPL mint</span><input value={existingMint} onChange={(e) => setExistingMint(e.target.value.trim())} placeholder="Mint address" /></label>
           <label><span>Mint creation transaction</span><input value={existingCreationSignature} onChange={(e) => setExistingCreationSignature(e.target.value.trim())} placeholder="Creation signature" /></label>
-          <button className="secondary" onClick={registerExistingToken}>Register existing asset</button>
+          <button className="secondary" disabled={!publicLaunchEnabled} onClick={registerExistingToken}>Register existing asset</button>
           <small>ZApp verifies the connected wallet created the mint and that mint authority is revoked before listing it.</small>
         </aside>
       )}
