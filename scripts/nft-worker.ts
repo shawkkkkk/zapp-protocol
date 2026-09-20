@@ -401,6 +401,13 @@ async function main() {
   const watch = process.argv.includes("--watch");
   do {
     try {
+      if (process.env.ZAPP_NFT_MINT_ENABLED === "false") {
+        await heartbeatService("nft-worker", "paused", "NFT mint kill switch is off");
+        if (!watch) break;
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        continue;
+      }
+
       const worked = await processOne();
       await heartbeatService("nft-worker", "ready", worked ? "processed queue item" : "idle");
       if (worked) {
