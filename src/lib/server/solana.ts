@@ -111,6 +111,7 @@ function verifyConfiguredServiceFee(
 export async function verifyBurnTransaction(
   signature: string,
   connection = solanaConnection(),
+  options: { requireRelayFee?: boolean } = {},
 ): Promise<BurnEvidence> {
   if (!signature || signature.length < 40) throw new Error("Invalid Solana signature");
 
@@ -159,7 +160,9 @@ export async function verifyBurnTransaction(
     throw new Error("Burn authority is not a direct transaction signer; multisig/delegated v1 claims are not supported");
   }
 
-  verifyConfiguredServiceFee(instructions, burn.authority);
+  if (options.requireRelayFee) {
+    verifyConfiguredServiceFee(instructions, burn.authority);
+  }
 
   const burnId = deriveBurnId({
     solanaGenesisHash: genesisHash,
