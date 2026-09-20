@@ -4,6 +4,12 @@ import { buildLaunchMessage, type LaunchMessageInput } from "../launch.ts";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID, getMint } from "@solana/spl-token";
 import { fetchFinalizedRawTransaction } from "./solana-raw.ts";
+import {
+  fetchMetadataFromSeeds,
+  mplTokenMetadata,
+} from "@metaplex-foundation/mpl-token-metadata";
+import { publicKey } from "@metaplex-foundation/umi";
+import { createUmi } from "@metaplex-foundation/umi-bundle-defaults";
 
 function connection(): Connection {
   return new Connection(process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com", {
@@ -19,6 +25,12 @@ export async function inspectMint(mint: string): Promise<{
   supplyBaseUnits: string;
   mintAuthorityRevoked: boolean;
   freezeAuthorityRevoked: boolean;
+  metadata: {
+    name: string;
+    symbol: string;
+    uri: string;
+    isMutable: boolean;
+  } | null;
 }> {
   const rpc = connection();
   const mintKey = new PublicKey(mint);
@@ -31,6 +43,30 @@ export async function inspectMint(mint: string): Promise<{
   else throw new Error("Asset is not an SPL Token or Token-2022 mint");
 
   const mintInfo = await getMint(rpc, mintKey, "confirmed", tokenProgram);
+
+  let metadata: {
+    name: string;
+    symbol: string;
+    uri: string;
+    isMutable: boolean;
+  } | null = null;
+  try {
+    const umi = createUmi(
+      process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com",
+    ).use(mplTokenMetadata());
+    const onchain = await fetchMetadataFromSeeds(umi, {
+      mint: publicKey(mintKey.toBase58()),
+    });
+    metadata = {
+      name: onchain.name.replace(/\0/g, "").trim(),
+      symbol: onchain.symbol.replace(/\0/g, "").trim(),
+      uri: onchain.uri.replace(/\0/g, "").trim(),
+      isMutable: onchain.isMutable,
+    };
+  } catch {
+    // Metadata is optional; SPL mint verification remains independent of it.
+  }
+
   return {
     mint: mintKey.toBase58(),
     tokenProgram: tokenProgram.toBase58(),
@@ -38,6 +74,7 @@ export async function inspectMint(mint: string): Promise<{
     supplyBaseUnits: mintInfo.supply.toString(),
     mintAuthorityRevoked: mintInfo.mintAuthority === null,
     freezeAuthorityRevoked: mintInfo.freezeAuthority === null,
+    metadata,
   };
 }
 
