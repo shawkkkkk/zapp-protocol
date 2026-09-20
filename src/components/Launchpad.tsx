@@ -147,6 +147,27 @@ export function Launchpad({
     }
   }
 
+  async function assertBurnInfrastructureReady() {
+    const response = await fetch("/api/readiness", { cache: "no-store" });
+    const json = await response.json() as {
+      ready?: boolean;
+      infrastructureReady?: boolean;
+      checks?: Array<{ ok: boolean; name: string; detail: string }>;
+    };
+
+    const ok = forceEnabled ? json.infrastructureReady === true : json.ready === true;
+    if (ok) return;
+
+    const failed = (json.checks || []).filter((check) => !check.ok);
+    const detail = failed
+      .slice(0, 3)
+      .map((check) => check.name + ": " + check.detail)
+      .join("; ");
+    throw new Error(
+      "Burn temporarily unavailable" + (detail ? " — " + detail : "."),
+    );
+  }
+
   async function migrate() {
     setMessage("");
     if (!launchEnabled) {
@@ -172,9 +193,10 @@ export function Launchpad({
       return;
     }
 
-    setReviewing(false);
     setResult({});
     try {
+      await assertBurnInfrastructureReady();
+      setReviewing(false);
       setStage("signing");
       const built = await buildBurnAndProofTransaction({
         owner: publicKey,
