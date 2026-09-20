@@ -10,6 +10,7 @@ import {
   validateTokenImageBytes,
 } from "@/lib/image-upload";
 import { putLaunchImage } from "@/lib/server/db";
+import { mutationAllowed } from "@/lib/server/mutation-access";
 import { enforceRateLimit, RateLimitError, rateLimitResponse } from "@/lib/server/rate-limit";
 
 export const runtime = "nodejs";
@@ -17,6 +18,12 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   try {
+    if (!mutationAllowed(request)) {
+      return NextResponse.json(
+        { error: "ZApp public launch is not enabled yet" },
+        { status: 503 },
+      );
+    }
     const form = await request.formData();
     const file = form.get("file");
     const creator = String(form.get("creator") || "").trim();
