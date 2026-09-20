@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS claims (
   zcash_tx_index INTEGER,
   recipient_vout INTEGER,
   carrier_vout INTEGER,
-  status TEXT NOT NULL CHECK (status IN ('reserved','broadcast','confirmed','failed','invalidated')),
+  status TEXT NOT NULL CHECK (status IN ('reserved','relaying','broadcast','confirmed','failed','invalidated')),
   error TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
