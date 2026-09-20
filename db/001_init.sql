@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS claims (
   current_owner TEXT,
   owner_txid TEXT,
   owner_vout INTEGER,
+  ownership_state TEXT NOT NULL DEFAULT 'tracked'
+    CHECK (ownership_state IN ('tracked','terminal')),
   status TEXT NOT NULL CHECK (status IN ('reserved','relaying','broadcast','confirmed','failed','invalidated')),
   error TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -38,7 +40,7 @@ CREATE TABLE IF NOT EXISTS zcash_blocks (
 );
 
 CREATE TABLE IF NOT EXISTS transfers (
-  txid TEXT PRIMARY KEY,
+  txid TEXT NOT NULL,
   burn_id TEXT NOT NULL REFERENCES claims(burn_id) ON DELETE CASCADE,
   zcash_height BIGINT NOT NULL,
   zcash_tx_index INTEGER NOT NULL,
@@ -46,8 +48,9 @@ CREATE TABLE IF NOT EXISTS transfers (
   from_vout INTEGER NOT NULL,
   to_owner TEXT NOT NULL,
   to_vout INTEGER NOT NULL,
-  payload_vout INTEGER NOT NULL,
+  payload_vout INTEGER,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (txid, burn_id),
   UNIQUE (burn_id, zcash_height, zcash_tx_index)
 );
 
