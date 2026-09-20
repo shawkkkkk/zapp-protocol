@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { encodeClaimPayload, bytesToHex } from "@/lib/protocol";
 import { verifyBurnTransaction } from "@/lib/server/solana";
 import {
+  acquireClaimRelay,
   getClaim,
   listClaims,
   markClaimBroadcast,
@@ -41,6 +42,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   let burnId: string | null = null;
+  let acquiredRelay = false;
   try {
     const body = (await request.json()) as { solanaSignature?: string };
     const signature = body.solanaSignature?.trim();
@@ -74,6 +76,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    acquiredRelay = await acquireClaimRelay(evidence.burnId);
+    if (!acquiredRelay) {
+      return NextResponse.json(
+        { claim: publicClaim(await getClaim(evidence.burnId)), reused: true, processing: true },
+        { status: 202 },
+      );
+    }
+
     const broadcast = await broadcastProof(evidence);
     await markClaimBroadcast({
       burnId: evidence.burnId,
@@ -94,7 +104,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Claim failed";
-    if (burnId) {
+    if (burnId && acquiredRelay) {
       try {
         await markClaimFailed(burnId, message);
       } catch {
