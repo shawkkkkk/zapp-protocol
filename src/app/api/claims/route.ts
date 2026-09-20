@@ -23,6 +23,8 @@ function publicClaim(row: Awaited<ReturnType<typeof getClaim>>) {
     mint: row.mint,
     amountBaseUnits: row.amount_base_units,
     recipient: row.recipient,
+    currentOwner: row.current_owner,
+    ownerOutpoint: row.owner_txid && row.owner_vout !== null ? `${row.owner_txid}:${row.owner_vout}` : null,
     zcashTxid: row.zcash_txid,
     zcashHeight: row.zcash_height,
     status: row.status,
