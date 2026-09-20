@@ -7,6 +7,7 @@ import {
   TOKEN_IMAGE_TYPES,
   buildImageUploadMessage,
   internalImagePath,
+  validateTokenImageBytes,
 } from "@/lib/image-upload";
 import { putLaunchImage } from "@/lib/server/db";
 import { enforceRateLimit, RateLimitError, rateLimitResponse } from "@/lib/server/rate-limit";
@@ -25,7 +26,12 @@ export async function POST(request: NextRequest) {
     if (!creator) throw new Error("Creator wallet is required");
 
     await enforceRateLimit(request, {
-      namespace: "image-upload",
+      namespace: "image-upload-ip",
+      limit: 30,
+      windowSeconds: 3600,
+    });
+    await enforceRateLimit(request, {
+      namespace: "image-upload-wallet",
       limit: 30,
       windowSeconds: 3600,
       identity: creator,
@@ -38,6 +44,9 @@ export async function POST(request: NextRequest) {
     }
 
     const bytes = new Uint8Array(await file.arrayBuffer());
+    if (!validateTokenImageBytes(bytes, file.type)) {
+      throw new Error("Image contents do not match the declared file type");
+    }
     const sha256 = createHash("sha256").update(bytes).digest("hex");
     const message = new TextEncoder().encode(
       buildImageUploadMessage({
