@@ -66,6 +66,12 @@ export function LaunchCreator() {
   const [existingMint, setExistingMint] = useState("");
   const [creationSignature, setCreationSignature] = useState("");
   const [inspection, setInspection] = useState<Inspection | null>(null);
+  const [pendingLaunch, setPendingLaunch] = useState<{
+    mint: string;
+    creationSignature: string;
+    creator: string;
+    minBurnBaseUnits: string;
+  } | null>(null);
 
   async function uploadImage(file: File): Promise<string> {
     if (!publicKey) throw new Error("Connect a Solana wallet first");
@@ -216,16 +222,48 @@ export function LaunchCreator() {
       setMessage("Token transaction sent. Waiting for Solana finality…");
       await waitForFinalized(signature);
 
-      await registerLaunch({
+      const pending = {
         mint: built.mint,
         creationSignature: signature,
         creator: owner.toBase58(),
         minBurnBaseUnits,
-      });
+      };
+      setPendingLaunch(pending);
+      try {
+        localStorage.setItem("zapp-pending-launch", JSON.stringify(pending));
+      } catch {}
+
+      await registerLaunch(pending);
+      setPendingLaunch(null);
+      try {
+        localStorage.removeItem("zapp-pending-launch");
+      } catch {}
 
       window.location.href = "/asset/" + built.mint;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Launch failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+
+  async function retryPendingRegistration() {
+    if (!pendingLaunch) return;
+    setBusy(true);
+    setMessage("Retrying launch registration…");
+    try {
+      await registerLaunch(pendingLaunch);
+      const mint = pendingLaunch.mint;
+      setPendingLaunch(null);
+      try {
+        localStorage.removeItem("zapp-pending-launch");
+      } catch {}
+      window.location.href = "/asset/" + mint;
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Registration retry failed",
+      );
     } finally {
       setBusy(false);
     }
@@ -487,6 +525,26 @@ export function LaunchCreator() {
               {busy ? "Registering…" : "Register existing asset"}
             </button>
           </>
+        )}
+
+        {pendingLaunch && (
+          <div className="pending-launch">
+            <div>
+              <b>Token finalized; registration still pending.</b>
+              <code>{pendingLaunch.mint}</code>
+              <small>
+                Your token already exists on Solana. Retrying registration does not mint
+                another supply.
+              </small>
+            </div>
+            <button
+              className="secondary inline"
+              disabled={busy}
+              onClick={retryPendingRegistration}
+            >
+              Retry registration
+            </button>
+          </div>
         )}
 
         {message && <div className="notice">{message}</div>}
