@@ -78,6 +78,12 @@ function markerZats(): bigint {
   return value;
 }
 
+function decodedOutputZats(output: { value?: number; valueZat?: number }): bigint {
+  if (output.valueZat !== undefined) return BigInt(output.valueZat);
+  if (output.value !== undefined) return BigInt(Math.round(output.value * 100_000_000));
+  return -1n;
+}
+
 function compactSizeHex(value: number): string {
   if (!Number.isSafeInteger(value) || value < 0 || value >= 253) {
     throw new Error("ZApp writer only supports compact-size values below 253");
@@ -162,7 +168,7 @@ function assertTransactionCarriesProof(
   const targetZats = markerZats();
   const recipients = decoded.vout.filter((output) => {
     const addresses = output.scriptPubKey.addresses || [];
-    return addresses.includes(evidence.recipient) && BigInt(output.valueZat ?? -1) === targetZats;
+    return addresses.includes(evidence.recipient) && decodedOutputZats(output) === targetZats;
   });
   if (recipients.length !== 1) {
     throw new Error("Prepared Zcash transaction must contain exactly one marker output to the committed recipient");
@@ -194,7 +200,7 @@ async function buildUnfundedProofTransaction(
   const placeholderOutputs = decodedPlaceholder.vout.filter(
     (output) =>
       (output.scriptPubKey.addresses || []).includes(placeholder.p2sh as string) &&
-      BigInt(output.valueZat ?? -1) === 0n,
+      decodedOutputZats(output) === 0n,
   );
   if (placeholderOutputs.length !== 1) {
     throw new Error("Zcash writer could not create a unique carrier placeholder");
@@ -277,7 +283,7 @@ function assertTransactionCarriesTransfer(
   const recipients = decoded.vout.filter(
     (output) =>
       (output.scriptPubKey.addresses || []).includes(input.toOwner) &&
-      BigInt(output.valueZat ?? -1) === markerZats(),
+      decodedOutputZats(output) === markerZats(),
   );
   if (recipients.length !== 1) throw new Error("Transfer must create exactly one marker output for the new owner");
   return { recipientVout: recipients[0].n, carrierVout: carriers[0].vout };
@@ -309,7 +315,7 @@ export async function broadcastTransfer(
   const placeholderOutputs = decodedPlaceholder.vout.filter(
     (output) =>
       (output.scriptPubKey.addresses || []).includes(placeholder.p2sh as string) &&
-      BigInt(output.valueZat ?? -1) === 0n,
+      decodedOutputZats(output) === 0n,
   );
   if (placeholderOutputs.length !== 1) throw new Error("Transfer carrier placeholder is not unique");
 
