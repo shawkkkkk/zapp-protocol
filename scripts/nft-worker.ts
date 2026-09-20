@@ -250,7 +250,37 @@ async function processOne(): Promise<boolean> {
     await waitWalletConfirmation(rpc, commitTxid);
 
     if (job.reveal_txid && job.reveal_raw_hex) {
+      const recoveredReveal = await rpc.call<DecodedTx>(
+        "decoderawtransaction",
+        [job.reveal_raw_hex],
+      );
+      if (recoveredReveal.txid !== job.reveal_txid) {
+        throw new Error("Persisted reveal raw transaction id does not match stored txid");
+      }
+      const recoveredCarrier = findClaimPayloads(recoveredReveal);
+      if (
+        recoveredCarrier.length !== 1 ||
+        recoveredCarrier[0].payloadHex !== claim.payload_hex
+      ) {
+        throw new Error("Persisted reveal does not contain the canonical ZApp proof");
+      }
+      const recoveredRecipient = recoveredReveal.vout.find(
+        (output) =>
+          output.n === 0 &&
+          (output.scriptPubKey.addresses || []).includes(claim.recipient) &&
+          outputZats(output) === POSTAGE_ZATS,
+      );
+      if (!recoveredRecipient) {
+        throw new Error("Persisted reveal does not pay the committed recipient at vout 0");
+      }
+
       await rebroadcast(rpc, job.reveal_raw_hex, job.reveal_txid);
+      await markClaimBroadcast({
+        burnId: claim.burn_id,
+        txid: job.reveal_txid,
+        recipientVout: 0,
+        carrierVout: recoveredCarrier[0].vout,
+      });
       await waitChainConfirmation(rpc, job.reveal_txid);
       await updateNftMint(job.burn_id, {
         status: "confirmed",
