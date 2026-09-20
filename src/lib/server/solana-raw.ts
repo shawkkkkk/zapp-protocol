@@ -243,15 +243,28 @@ export async function verifyBurnRaw(signature: string): Promise<BurnEvidence> {
   };
 }
 
+export type FinalizedAddressSignature = {
+  signature: string;
+  err: unknown;
+  memo?: string | null;
+  slot: number;
+};
+
+export async function getFinalizedSolanaSlot(): Promise<number> {
+  return rpc<number>("getSlot", [{ commitment: "finalized" }]);
+}
+
 export async function listFinalizedMintSignatures(
   mint: string,
-  before?: string,
-): Promise<Array<{ signature: string; err: unknown; memo?: string | null; slot: number }>> {
+  input: { before?: string; until?: string; limit?: number } = {},
+): Promise<FinalizedAddressSignature[]> {
+  const limit = Math.max(1, Math.min(input.limit || 1000, 1000));
   return rpc("getSignaturesForAddress", [
     mint,
     {
-      before,
-      limit: 1000,
+      before: input.before,
+      until: input.until,
+      limit,
       commitment: "finalized",
     },
   ]);
@@ -265,7 +278,7 @@ export async function findBurnRawByCommitment(
   let before: string | undefined;
 
   for (let page = 0; page < maxPages; page += 1) {
-    const signatures = await listFinalizedMintSignatures(mint, before);
+    const signatures = await listFinalizedMintSignatures(mint, { before });
     if (signatures.length === 0) return null;
 
     for (const candidate of signatures) {
