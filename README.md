@@ -93,7 +93,7 @@ tests/
 ```bash
 cp .env.example .env
 docker compose up -d
-psql "$DATABASE_URL" -f db/001_init.sql
+for file in db/*.sql; do psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$file"; done
 npm install
 npm test
 npm run typecheck
@@ -182,3 +182,25 @@ npm run state:root
 
 The state endpoint (`/api/state`) reports the indexed Zcash height/block hash, Proof count,
 per-mint base-unit totals, and a deterministic state root committing to current ownership.
+
+## Public launch gate
+
+ZApp defaults to preview mode. Keep:
+
+```
+ZAPP_PUBLIC_LAUNCH_ENABLED=false
+NEXT_PUBLIC_ZAPP_PUBLIC_LAUNCH_ENABLED=false
+```
+
+until production dependencies are configured and:
+
+```bash
+npm run preflight
+```
+
+passes. Then enable both gates and redeploy/restart the web process. The API rejects new
+launch registrations and burn claims while the server gate is closed, even if a client
+tries to bypass the disabled UI.
+
+See [docs/LAUNCH_RUNBOOK.md](docs/LAUNCH_RUNBOOK.md) for the canary and emergency-stop
+procedure.
