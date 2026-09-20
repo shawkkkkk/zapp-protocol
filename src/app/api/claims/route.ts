@@ -43,6 +43,16 @@ export async function POST(request: NextRequest) {
         { status: 503 },
       );
     }
+    if (process.env.ZAPP_NFT_MINT_ENABLED === "false") {
+      return NextResponse.json(
+        {
+          error:
+            "ZApp NFT minting is temporarily paused. Existing finalized burns can be recovered after service resumes.",
+        },
+        { status: 503 },
+      );
+    }
+
     const body = (await request.json()) as { solanaSignature?: string };
     const signature = body.solanaSignature?.trim();
     if (!signature) return NextResponse.json({ error: "solanaSignature is required" }, { status: 400 });
