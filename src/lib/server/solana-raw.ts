@@ -32,6 +32,8 @@ type RawTransaction = {
     innerInstructions?: Array<{ index: number; instructions: RawIx[] }> | null;
     preTokenBalances?: TokenBalance[] | null;
     postTokenBalances?: TokenBalance[] | null;
+    preBalances?: number[] | null;
+    postBalances?: number[] | null;
     loadedAddresses?: { writable: string[]; readonly: string[] } | null;
   } | null;
   transaction: {
