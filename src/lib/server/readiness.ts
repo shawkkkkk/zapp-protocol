@@ -55,6 +55,7 @@ export async function readinessChecks(): Promise<ReadinessCheck[]> {
       registration_sig_column: string | null;
       indexer_verified_column: string | null;
       watch_cursors: string | null;
+      registered_supply_column: string | null;
     }>(
       `SELECT
          to_regclass('public.claims')::text AS claims,
@@ -94,7 +95,15 @@ export async function readinessChecks(): Promise<ReadinessCheck[]> {
              AND column_name='indexer_verified_at'
            LIMIT 1
          ) AS indexer_verified_column,
-         to_regclass('public.asset_watch_cursors')::text AS watch_cursors`,
+         to_regclass('public.asset_watch_cursors')::text AS watch_cursors,
+         (
+           SELECT column_name
+           FROM information_schema.columns
+           WHERE table_schema='public'
+             AND table_name='assets'
+             AND column_name='registered_supply_base_units'
+           LIMIT 1
+         ) AS registered_supply_column`,
     );
     const row = schema.rows[0];
     const ok = Boolean(
@@ -107,7 +116,8 @@ export async function readinessChecks(): Promise<ReadinessCheck[]> {
       row?.creation_sig_column &&
       row?.registration_sig_column &&
       row?.indexer_verified_column &&
-      row?.watch_cursors
+      row?.watch_cursors &&
+      row?.registered_supply_column
     );
     checks.push({
       ok,
