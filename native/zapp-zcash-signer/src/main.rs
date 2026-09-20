@@ -19,7 +19,7 @@ use zcash_script::script;
 struct Input {
     raw_tx_hex: String,
     prev_script_pubkey_hex: String,
-    prev_value_zats: i64,
+    prev_value_zats: String,
     redeem_script_hex: String,
     content_hex: String,
     content_type: String,
@@ -180,7 +180,11 @@ fn main() -> Result<()> {
     let redeem_script_bytes = hex::decode(&input.redeem_script_hex)?;
     let content = hex::decode(&input.content_hex)?;
 
-    if input.prev_value_zats <= 0 {
+    let prev_value_zats: i64 = input
+        .prev_value_zats
+        .parse()
+        .context("previous output value must be an integer zatoshi string")?;
+    if prev_value_zats <= 0 {
         bail!("previous output value must be positive");
     }
 
@@ -195,7 +199,7 @@ fn main() -> Result<()> {
         _ => bail!("ZApp inscription signer only accepts V5+ Zcash transactions"),
     }
 
-    let prev_value = Zatoshis::from_nonnegative_i64(input.prev_value_zats)
+    let prev_value = Zatoshis::from_nonnegative_i64(prev_value_zats)
         .map_err(|_| anyhow!("invalid previous output value"))?;
     let prev_script = Script(script::Code(prev_script_bytes));
     let redeem_script = Script(script::Code(redeem_script_bytes.clone()));
