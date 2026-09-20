@@ -416,7 +416,10 @@ export async function acquireNextNftMint(): Promise<NftMintRow | null> {
     const selected = await client.query<NftMintRow>(
       `SELECT * FROM nft_mints
        WHERE status='queued'
-          OR (status='building' AND updated_at < NOW() - INTERVAL '10 minutes')
+          OR (
+            status IN ('building','commit_broadcast','reveal_broadcast')
+            AND updated_at < NOW() - INTERVAL '30 seconds'
+          )
        ORDER BY created_at ASC
        FOR UPDATE SKIP LOCKED
        LIMIT 1`,
