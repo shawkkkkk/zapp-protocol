@@ -1,9 +1,8 @@
 # ZApp Protocol
 
-**Burn on Solana. Prove it on Zcash.**
+**Launch on Solana. Burn. Receive a Zcash NFT.**
 
-ZApp is a permissionless overlay protocol that turns a finalized SPL-token destruction into
-a compact, independently verifiable record on **Zcash mainnet today**.
+ZApp is a permissionless asset-launchpad workaround for the fact that native custom assets are not active on Zcash mainnet yet. Users launch or select an SPL/Token-2022 asset, burn tokens on Solana, and receive a **real collectible inscription/NFT on Zcash mainnet** representing that destruction. A compact Proof layer sits underneath the NFT for verification, duplicate protection and ownership reconstruction.
 
 It does **not** pretend that Zcash Shielded Assets are already live. ZIP-226/227 remain
 draft consensus proposals. A ZApp Proof is a Zcash-mainnet inscription/receipt under ZApp's
@@ -15,12 +14,19 @@ rules, not a native ZSA.
 |---|---|---|
 | SPL / Token-2022 `BurnChecked` | Solana mainnet | Real |
 | Destination commitment | Same Solana tx memo | Real |
-| 78-byte ZApp Proof | Zcash transparent `OP_RETURN` | Real |
-| Marker output to burner-selected address | Zcash mainnet | Real |
+| ZApp NFT / inscription | Zcash mainnet | Real |
+| 78-byte ZApp Proof verification layer | Zcash transparent `OP_RETURN` | Real |
+| Marker ownership output | Zcash mainnet | Real |
 | Native shielded custom asset | Zcash | **Not live** |
 | Future ZSA conversion | Future policy | **Not guaranteed by current consensus** |
 
 No `mock-...` transaction IDs exist anywhere in ZApp.
+
+## Product premise
+
+The NFT is the user-facing object. It records the Solana mint, burn signature, burn ID, exact amount and Zcash destination. It can be independently checked against the source burn. If compatible native Zcash assets ship later, canonical NFT ownership is the intended migration basis under a separately versioned policy.
+
+See [docs/NFT_MODEL.md](docs/NFT_MODEL.md).
 
 ## Why this is stronger than a trusted certificate server
 
