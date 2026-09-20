@@ -113,6 +113,7 @@ export default async function ProofPage({
       <nav className="nav shell">
         <a className="brand" href="/">ZApp</a>
         <div className="navlinks">
+          <a href="/burn">Burn</a>
           <a href="/#launch">Launch</a>
           <a href="/#register">Register</a>
           <a href="/explorer">Explorer</a>
