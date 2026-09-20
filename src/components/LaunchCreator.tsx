@@ -28,6 +28,12 @@ type Inspection = {
   supplyBaseUnits: string;
   mintAuthorityRevoked: boolean;
   freezeAuthorityRevoked: boolean;
+  metadata: {
+    name: string;
+    symbol: string;
+    uri: string;
+    isMutable: boolean;
+  } | null;
 };
 
 export type LaunchedAsset = {
@@ -227,6 +233,14 @@ export function LaunchCreator({
       if (!response.ok) throw new Error(json.error || "Unable to inspect mint");
       const inspected = json.mint as Inspection;
       setInspection(inspected);
+      if (inspected.metadata) {
+        if (!name.trim() && inspected.metadata.name) {
+          setName(inspected.metadata.name.slice(0, 32));
+        }
+        if (!symbol.trim() && inspected.metadata.symbol) {
+          setSymbol(inspected.metadata.symbol.toUpperCase().slice(0, 10));
+        }
+      }
       if (!inspected.mintAuthorityRevoked || !inspected.freezeAuthorityRevoked) {
         setMessage(
           "Public ZApp listings require both mint and freeze authority to be revoked.",
@@ -640,6 +654,9 @@ export function LaunchCreator({
                 </span>
                 <span>{inspection.decimals} decimals</span>
                 <span>{inspection.supplyBaseUnits} raw supply</span>
+                {inspection.metadata && (
+                  <span className="ok">✓ Solana metadata detected</span>
+                )}
               </div>
             )}
 
