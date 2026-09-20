@@ -105,7 +105,7 @@ async function processAsset(mint: string): Promise<number> {
   for (const row of rows) {
     if (!row.signature) continue;
 
-    if (row.err || !looksLikeZAppMemo(row.memo)) {
+    if (row.err || (row.memo !== null && row.memo !== undefined && !looksLikeZAppMemo(row.memo))) {
       await advanceAssetWatchCursor({
         mint,
         signature: row.signature,
