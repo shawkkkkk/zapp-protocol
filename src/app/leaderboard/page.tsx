@@ -27,6 +27,7 @@ export default async function Leaderboard() {
       <nav className="nav shell">
         <a className="brand" href="/">ZApp</a>
         <div className="navlinks">
+          <a href="/burn">Burn</a>
           <a href="/#launch">Launch</a>
           <a href="/#register">Register</a>
           <a href="/leaderboard">Leaderboard</a>
