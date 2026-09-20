@@ -106,6 +106,7 @@ export async function POST(request: NextRequest) {
       minBurnBaseUnits,
       creationSignature,
       registrationSignature,
+      registeredSupplyBaseUnits: verified.supplyBaseUnits,
       tokenProgram: verified.tokenProgram,
       decimals: verified.decimals,
       launchSlot: verified.launchSlot,
