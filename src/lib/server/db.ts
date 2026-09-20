@@ -378,7 +378,9 @@ export type NftMintRow = {
   content_sha256: string;
   commit_txid: string | null;
   commit_vout: number | null;
+  commit_raw_hex: string | null;
   reveal_txid: string | null;
+  reveal_raw_hex: string | null;
   inscription_id: string | null;
   attempts: number;
   error: string | null;
@@ -451,7 +453,9 @@ export async function updateNftMint(
     status: NftMintRow["status"];
     commitTxid?: string | null;
     commitVout?: number | null;
+    commitRawHex?: string | null;
     revealTxid?: string | null;
+    revealRawHex?: string | null;
     inscriptionId?: string | null;
     error?: string | null;
   },
@@ -461,14 +465,17 @@ export async function updateNftMint(
       status=$2,
       commit_txid=COALESCE($3,commit_txid),
       commit_vout=COALESCE($4,commit_vout),
-      reveal_txid=COALESCE($5,reveal_txid),
-      inscription_id=COALESCE($6,inscription_id),
-      error=$7,
+      commit_raw_hex=COALESCE($5,commit_raw_hex),
+      reveal_txid=COALESCE($6,reveal_txid),
+      reveal_raw_hex=COALESCE($7,reveal_raw_hex),
+      inscription_id=COALESCE($8,inscription_id),
+      error=$9,
       updated_at=NOW()
      WHERE burn_id=$1`,
     [
       burnId,patch.status,patch.commitTxid ?? null,patch.commitVout ?? null,
-      patch.revealTxid ?? null,patch.inscriptionId ?? null,patch.error ?? null,
+      patch.commitRawHex ?? null,patch.revealTxid ?? null,patch.revealRawHex ?? null,
+      patch.inscriptionId ?? null,patch.error ?? null,
     ],
   );
 }
