@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: zapp
+      POSTGRES_PASSWORD: zapp
+      POSTGRES_DB: zapp
+    ports:
+      - "5432:5432"
+    volumes:
+      - zapp-postgres:/var/lib/postgresql/data
+
+volumes:
+  zapp-postgres:
