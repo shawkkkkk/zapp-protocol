@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { Launchpad } from "@/components/Launchpad";
-import { getAsset } from "@/lib/server/db";
+import { getAsset, getAssetStats } from "@/lib/server/db";
 
 export const dynamic = "force-dynamic";
 
@@ -8,6 +8,7 @@ export default async function AssetPage({ params }: { params: Promise<{ mint: st
   const { mint } = await params;
   const asset = await getAsset(mint);
   if (!asset) notFound();
+  const stats = await getAssetStats(mint);
 
   return (
     <main>
@@ -25,6 +26,12 @@ export default async function AssetPage({ params }: { params: Promise<{ mint: st
           <p>{asset.description || "Burn this SPL token and receive its corresponding collectible on Zcash mainnet."}</p>
           <code>{asset.mint}</code>
         </div>
+      </section>
+      <section className="assetstats shell">
+        <div><b>{stats.verified_burns}</b><span>Verified burns</span></div>
+        <div><b>{stats.burned_base_units}</b><span>Raw units burned</span></div>
+        <div><b>{stats.confirmed_nfts}</b><span>Zcash NFTs confirmed</span></div>
+        <div><b>{stats.pending_nfts}</b><span>NFTs minting</span></div>
       </section>
       <Launchpad initialMint={asset.mint} initialSymbol={asset.symbol} hideCreator />
     </main>
