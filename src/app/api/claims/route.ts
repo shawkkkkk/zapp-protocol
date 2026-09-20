@@ -1,16 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { bytesToHex, encodeClaimPayload } from "@/lib/protocol";
-import { verifyBurnTransaction } from "@/lib/server/solana";
-import { verifyBurnRaw } from "@/lib/server/solana-raw";
-import {
-  getAsset,
-  getClaim,
-  getNftMint,
-  listClaims,
-  queueNftMint,
-  reserveClaim,
-} from "@/lib/server/db";
-import { encodeNftContent, nftContentCommitment, nftContentForBurn } from "@/lib/nft";
+import { getClaim, listClaims } from "@/lib/server/db";
+import { processBurnSignature } from "@/lib/server/claim-service";
 import { enforceRateLimit, RateLimitError, rateLimitResponse } from "@/lib/server/rate-limit";
 
 export const runtime = "nodejs";
@@ -59,48 +49,14 @@ export async function POST(request: NextRequest) {
       windowSeconds: 3600,
     });
 
-    const evidence = await verifyBurnRaw(signature);
-
-    if (BigInt(process.env.ZAPP_FEE_LAMPORTS || "0") > 0n) {
-      const feeEvidence = await verifyBurnTransaction(signature, undefined, { requireRelayFee: true });
-      if (
-        feeEvidence.burnId !== evidence.burnId ||
-        feeEvidence.mint !== evidence.mint ||
-        feeEvidence.amount !== evidence.amount ||
-        feeEvidence.recipient !== evidence.recipient
-      ) {
-        throw new Error("Relay-fee parser disagrees with the canonical raw burn verifier");
-      }
-    }
-
-    if (process.env.ZAPP_REQUIRE_REGISTERED_ASSET !== "false") {
-      const asset = await getAsset(evidence.mint);
-      if (!asset) throw new Error("This mint is not a public ZApp launch");
-      if (evidence.amount < BigInt(asset.min_burn_base_units)) {
-        throw new Error(
-          "Burn is below this launch's minimum of " + asset.min_burn_base_units + " base units"
-        );
-      }
-    }
-
-    const payloadHex = bytesToHex(
-      encodeClaimPayload({ mint: evidence.mint, burnId: evidence.burnId, amount: evidence.amount }),
-    );
-    const claim = await reserveClaim(evidence, payloadHex);
-
-    const contentBytes = encodeNftContent(nftContentForBurn(evidence));
-    const nft = await queueNftMint({
-      burnId: evidence.burnId,
-      contentJson: new TextDecoder().decode(contentBytes),
-      contentSha256: nftContentCommitment(contentBytes),
-    });
+    const processed = await processBurnSignature(signature);
 
     if (process.env.ZAPP_NFT_MINT_ENABLED === "false") {
       return NextResponse.json(
         {
           error: "NFT mint worker is disabled",
-          claim: publicClaim(claim),
-          nft,
+          claim: publicClaim(processed.claim),
+          nft: processed.nft,
         },
         { status: 503 },
       );
@@ -108,17 +64,23 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(
       {
-        claim: publicClaim(await getClaim(evidence.burnId)),
-        nft: await getNftMint(evidence.burnId),
+        claim: publicClaim(processed.claim),
+        nft: processed.nft,
         proof: {
-          burnId: evidence.burnId,
-          mint: evidence.mint,
-          amountBaseUnits: evidence.amount.toString(),
-          recipient: evidence.recipient,
-          payloadHex,
+          burnId: processed.evidence.burnId,
+          mint: processed.evidence.mint,
+          amountBaseUnits: processed.evidence.amount.toString(),
+          recipient: processed.evidence.recipient,
+          payloadHex: processed.payloadHex,
         },
       },
-      { status: claim.status === "broadcast" || claim.status === "confirmed" ? 200 : 202 },
+      {
+        status:
+          processed.claim?.status === "broadcast" ||
+          processed.claim?.status === "confirmed"
+            ? 200
+            : 202,
+      },
     );
   } catch (error) {
     if (error instanceof RateLimitError) return rateLimitResponse(error);
