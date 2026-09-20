@@ -410,6 +410,7 @@ export type AssetRow = {
   description: string | null;
   website_url: string | null;
   x_url: string | null;
+  min_burn_base_units: string;
   launch_slot: string;
   enabled: boolean;
   created_at: string;
@@ -426,25 +427,27 @@ export async function upsertAsset(input: {
   description?: string | null;
   websiteUrl?: string | null;
   xUrl?: string | null;
+  minBurnBaseUnits: string;
   launchSlot: number;
 }): Promise<AssetRow> {
   const result = await database().query<AssetRow>(
     `INSERT INTO assets (
-      mint,token_program,name,symbol,decimals,creator,image_url,description,website_url,x_url,launch_slot
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+      mint,token_program,name,symbol,decimals,creator,image_url,description,website_url,x_url,min_burn_base_units,launch_slot
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
     ON CONFLICT (mint) DO UPDATE SET
       name=EXCLUDED.name,
       symbol=EXCLUDED.symbol,
       image_url=EXCLUDED.image_url,
       description=EXCLUDED.description,
       website_url=EXCLUDED.website_url,
-      x_url=EXCLUDED.x_url
+      x_url=EXCLUDED.x_url,
+      min_burn_base_units=EXCLUDED.min_burn_base_units
     WHERE assets.creator=EXCLUDED.creator
     RETURNING *`,
     [
       input.mint,input.tokenProgram,input.name,input.symbol,input.decimals,input.creator,
       input.imageUrl || null,input.description || null,input.websiteUrl || null,input.xUrl || null,
-      input.launchSlot,
+      input.minBurnBaseUnits,input.launchSlot,
     ],
   );
   if (!result.rows[0]) throw new Error("This mint is already registered by a different creator");
