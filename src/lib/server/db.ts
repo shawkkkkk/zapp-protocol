@@ -31,6 +31,9 @@ export type ClaimRow = {
   zcash_tx_index: number | null;
   recipient_vout: number | null;
   carrier_vout: number | null;
+  current_owner: string | null;
+  owner_txid: string | null;
+  owner_vout: number | null;
   status: "reserved" | "relaying" | "broadcast" | "confirmed" | "failed" | "invalidated";
   error: string | null;
   created_at: string;
@@ -163,14 +166,17 @@ export async function confirmIndexedClaim(input: {
     `INSERT INTO claims (
       burn_id, solana_signature, instruction_locator, solana_slot, mint, amount_base_units,
       recipient, payload_hex, zcash_txid, zcash_height, zcash_tx_index,
-      recipient_vout, carrier_vout, status
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'confirmed')
+      recipient_vout, carrier_vout, current_owner, owner_txid, owner_vout, status
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$7,$9,$12,'confirmed')
     ON CONFLICT (burn_id) DO UPDATE SET
       zcash_txid = EXCLUDED.zcash_txid,
       zcash_height = EXCLUDED.zcash_height,
       zcash_tx_index = EXCLUDED.zcash_tx_index,
       recipient_vout = EXCLUDED.recipient_vout,
       carrier_vout = EXCLUDED.carrier_vout,
+      current_owner = EXCLUDED.recipient,
+      owner_txid = EXCLUDED.zcash_txid,
+      owner_vout = EXCLUDED.recipient_vout,
       status = 'confirmed',
       error = NULL,
       updated_at = NOW()
@@ -193,4 +199,108 @@ export async function confirmIndexedClaim(input: {
     ],
   );
   return result.rowCount === 1;
+}
+
+export type TransferRow = {
+  txid: string;
+  burn_id: string;
+  zcash_height: string;
+  zcash_tx_index: number;
+  from_txid: string;
+  from_vout: number;
+  to_owner: string;
+  to_vout: number;
+  payload_vout: number;
+};
+
+export async function applyIndexedTransfer(input: {
+  burnId: string;
+  txid: string;
+  zcashHeight: number;
+  zcashTxIndex: number;
+  fromTxid: string;
+  fromVout: number;
+  toOwner: string;
+  toVout: number;
+  payloadVout: number;
+}): Promise<boolean> {
+  const client = await database().connect();
+  try {
+    await client.query("BEGIN");
+    const claimResult = await client.query<ClaimRow>(
+      "SELECT * FROM claims WHERE burn_id=$1 FOR UPDATE",
+      [input.burnId],
+    );
+    const claim = claimResult.rows[0];
+    if (
+      !claim ||
+      claim.status !== "confirmed" ||
+      claim.owner_txid !== input.fromTxid ||
+      claim.owner_vout !== input.fromVout
+    ) {
+      await client.query("ROLLBACK");
+      return false;
+    }
+
+    await client.query(
+      `INSERT INTO transfers (
+        txid,burn_id,zcash_height,zcash_tx_index,from_txid,from_vout,to_owner,to_vout,payload_vout
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      ON CONFLICT (txid) DO NOTHING`,
+      [
+        input.txid,
+        input.burnId,
+        input.zcashHeight,
+        input.zcashTxIndex,
+        input.fromTxid,
+        input.fromVout,
+        input.toOwner,
+        input.toVout,
+        input.payloadVout,
+      ],
+    );
+    await client.query(
+      `UPDATE claims
+       SET current_owner=$2, owner_txid=$3, owner_vout=$4, updated_at=NOW()
+       WHERE burn_id=$1`,
+      [input.burnId, input.toOwner, input.txid, input.toVout],
+    );
+    await client.query("COMMIT");
+    return true;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function rebuildOwnershipFromTransfers(): Promise<void> {
+  const db = database();
+  await db.query(
+    `UPDATE claims
+     SET current_owner=recipient,
+         owner_txid=zcash_txid,
+         owner_vout=recipient_vout
+     WHERE status='confirmed'`,
+  );
+
+  const claims = await db.query<{ burn_id: string }>(
+    "SELECT burn_id FROM claims WHERE status='confirmed'",
+  );
+  for (const row of claims.rows) {
+    const latest = await db.query<TransferRow>(
+      `SELECT * FROM transfers
+       WHERE burn_id=$1
+       ORDER BY zcash_height DESC, zcash_tx_index DESC
+       LIMIT 1`,
+      [row.burn_id],
+    );
+    const transfer = latest.rows[0];
+    if (!transfer) continue;
+    await db.query(
+      "UPDATE claims SET current_owner=$2, owner_txid=$3, owner_vout=$4 WHERE burn_id=$1",
+      [row.burn_id, transfer.to_owner, transfer.txid, transfer.to_vout],
+    );
+  }
 }
