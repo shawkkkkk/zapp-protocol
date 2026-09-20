@@ -129,7 +129,7 @@ export function LaunchCreator() {
     setInspection(null);
     if (!existingMint.trim()) {
       setMessage("Enter the existing SPL mint first.");
-      return;
+      return null;
     }
     try {
       const response = await fetch(
