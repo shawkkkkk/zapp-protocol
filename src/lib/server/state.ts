@@ -5,7 +5,7 @@ export type CanonicalState = {
   height: number | null;
   blockHash: string | null;
   proofCount: number;
-  totalAmountBaseUnits: string;
+  totalsByMint: Record<string, string>;
   root: string;
 };
 
@@ -28,11 +28,11 @@ export async function canonicalState(): Promise<CanonicalState> {
      ORDER BY burn_id ASC`,
   );
 
-  let total = 0n;
+  const totals = new Map<string, bigint>();
   const hasher = createHash("sha256");
   hasher.update("ZAPP_STATE_V1\n");
   for (const row of rows.rows) {
-    total += BigInt(row.amount_base_units);
+    totals.set(row.mint, (totals.get(row.mint) || 0n) + BigInt(row.amount_base_units));
     hasher.update(
       [
         row.burn_id,
@@ -49,7 +49,9 @@ export async function canonicalState(): Promise<CanonicalState> {
     height: state.rows[0] ? Number(state.rows[0].height) : null,
     blockHash: state.rows[0]?.block_hash || null,
     proofCount: rows.rowCount || 0,
-    totalAmountBaseUnits: total.toString(),
+    totalsByMint: Object.fromEntries(
+      [...totals.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([mint, amount]) => [mint, amount.toString()]),
+    ),
     root: hasher.digest("hex"),
   };
 }
