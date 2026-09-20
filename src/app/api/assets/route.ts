@@ -43,7 +43,12 @@ export async function POST(request: NextRequest) {
     const mint = cleanText(body.mint, "mint", 64);
     const creator = cleanText(body.creator, "creator", 64);
     await enforceRateLimit(request, {
-      namespace: "asset-register",
+      namespace: "asset-register-ip",
+      limit: 12,
+      windowSeconds: 3600,
+    });
+    await enforceRateLimit(request, {
+      namespace: "asset-register-creator",
       limit: 12,
       windowSeconds: 3600,
       identity: creator,
