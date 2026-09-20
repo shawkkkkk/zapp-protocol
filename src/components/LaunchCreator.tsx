@@ -19,7 +19,7 @@ import {
 const publicLaunchEnabled =
   process.env.NEXT_PUBLIC_ZAPP_PUBLIC_LAUNCH_ENABLED === "true";
 
-type Mode = "new" | "existing";
+type Mode = "new" | "existing" | "market";
 
 type Inspection = {
   mint: string;
@@ -456,6 +456,12 @@ export function LaunchCreator({
           >
             Existing SPL
           </button>
+          <button
+            className={mode === "market" ? "active" : ""}
+            onClick={() => setMode("market")}
+          >
+            Market launch
+          </button>
         </div>
 
         <div className="form-grid">
@@ -589,11 +595,12 @@ export function LaunchCreator({
               {busy ? "Launching…" : "Create & launch"}
             </button>
             <p className="microcopy">
-              The full supply is minted to your wallet, standard Solana metadata
-              is created, and mint authority is revoked in the same transaction.
+              Creates a fixed-supply SPL asset with standard Solana metadata.
+              The full supply goes to your wallet and mint authority is revoked
+              in the same transaction.
             </p>
           </>
-        ) : (
+        ) : mode === "existing" ? (
           <>
             <label>
               <span>Existing SPL / Token-2022 mint</span>
@@ -646,8 +653,9 @@ export function LaunchCreator({
                 placeholder="Original finalized transaction signature"
               />
               <small>
-                ZApp verifies that your connected wallet created the mint and
-                that both mint and freeze authority are revoked.
+                ZApp verifies creator provenance, creation-time mint evidence,
+                and that mint + freeze authority are revoked. Program-created
+                launchpad mints are supported.
               </small>
             </label>
 
@@ -659,6 +667,34 @@ export function LaunchCreator({
               {busy ? "Registering…" : "Register existing asset"}
             </button>
           </>
+        ) : (
+          <div className="market-launch">
+            <div className="eyebrow">TRADEABLE FROM DAY ONE</div>
+            <h3>Launch into a market, then bring it to ZApp.</h3>
+            <p>
+              If you want a bonding curve / trading market immediately, create
+              the coin through a market launcher first. Keep this tab open,
+              then return with the mint and original creation transaction.
+            </p>
+            <a
+              className="primary market-launch-link"
+              href="https://pump.fun/create"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open Pump.fun create ↗
+            </a>
+            <button
+              className="secondary"
+              onClick={() => setMode("existing")}
+            >
+              I created it — register on ZApp
+            </button>
+            <small>
+              ZApp does not custody the launch or trading liquidity. Registration
+              still requires creator proof and revoked mint/freeze authority.
+            </small>
+          </div>
         )}
 
         {pendingLaunch && (
