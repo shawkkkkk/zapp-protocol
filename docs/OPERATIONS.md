@@ -20,6 +20,7 @@ Apply:
 
 ```bash
 psql "$DATABASE_URL" -f db/001_init.sql
+psql "$DATABASE_URL" -f db/002_transfers.sql
 ```
 
 ## Indexer start height
@@ -61,3 +62,37 @@ A production launch should not be announced until all of these work end to end:
 
 Maintain at least one independent read-only indexer whose database is not shared with the
 relay service and compare canonical proof counts/state regularly.
+
+## Independent verification
+
+Run an independent indexer against separate RPC providers and a separate database, then
+compare:
+
+```bash
+npm run state:root
+```
+
+Both instances should report the same indexed height, block hash, Proof count, aggregate
+amount and state root.
+
+## Relay outage / rescue
+
+A finalized burn is not dependent on the official relay. A user or third party with a
+funded Zcash wallet RPC can run:
+
+```bash
+npm run relay:proof -- <solana-signature>
+```
+
+The resulting Proof still has to pass the canonical chain indexer.
+
+## Ownership transfer
+
+The wallet that controls the current marker outpoint can transfer ownership:
+
+```bash
+npm run transfer:proof -- <burn-id> <new-zcash-t-address>
+```
+
+The indexer accepts the change only after the transaction is confirmed and verifies that it
+spent the current marker and created exactly one replacement marker.
