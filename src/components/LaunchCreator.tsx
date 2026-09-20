@@ -103,8 +103,8 @@ export function LaunchCreator() {
   function validateMetadata() {
     if (!name.trim()) throw new Error("Name is required");
     if (!symbol.trim()) throw new Error("Ticker is required");
-    if (name.trim().length > 48) throw new Error("Name must be 48 characters or less");
-    if (symbol.trim().length > 12) throw new Error("Ticker must be 12 characters or less");
+    if (name.trim().length > 32) throw new Error("Name must be 32 characters or less");
+    if (symbol.trim().length > 10) throw new Error("Ticker must be 10 characters or less");
   }
 
   async function registerLaunch(input: {
@@ -199,10 +199,15 @@ export function LaunchCreator() {
 
       const launchDecimals = Number.parseInt(decimals, 10);
       const minBurnBaseUnits = parseUiAmount(minimumBurn, launchDecimals).toString();
+      const metadataOrigin =
+        process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
       const built = await buildFixedSupplyMintTransaction({
         owner,
         supplyUi: supply,
         decimals: launchDecimals,
+        name,
+        symbol,
+        metadataOrigin,
       });
       const signature = await sendTransaction(
         built.transaction,
@@ -307,7 +312,7 @@ export function LaunchCreator() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Zcash Cats"
-              maxLength={48}
+              maxLength={32}
             />
           </label>
           <label>
@@ -316,7 +321,7 @@ export function LaunchCreator() {
               value={symbol}
               onChange={(e) => setSymbol(e.target.value.toUpperCase())}
               placeholder="ZCATS"
-              maxLength={12}
+              maxLength={10}
             />
           </label>
         </div>
