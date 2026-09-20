@@ -9,6 +9,8 @@ import {
   decodeOpReturnScript,
   encodeClaimPayload,
   encodeOpReturnScript,
+  encodeTransferPayload,
+  decodeTransferPayload,
   formatBaseUnits,
   parseUiAmount,
   parseZAppMemo,
@@ -58,4 +60,16 @@ test("memo commits the Zcash destination", () => {
   const memo = buildZAppMemo(address);
   assert.equal(parseZAppMemo(memo), address);
   assert.equal(parseZAppMemo("hello"), null);
+});
+
+test("transfer payload is compact and names exactly one Proof", () => {
+  const payload = encodeTransferPayload({ burnId: BURN_ID });
+  assert.equal(payload.length, 38);
+  assert.deepEqual(decodeTransferPayload(payload), {
+    version: 1,
+    operation: "transfer",
+    burnId: BURN_ID,
+  });
+  const script = encodeOpReturnScript(payload);
+  assert.equal(script.length, 40);
 });
