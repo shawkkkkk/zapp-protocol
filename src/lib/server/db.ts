@@ -867,3 +867,57 @@ export async function getLaunchImage(sha256: string): Promise<LaunchImageRow | n
   );
   return result.rows[0] || null;
 }
+
+
+export type AssetWatchCursorRow = {
+  mint: string;
+  start_slot: string;
+  last_signature: string | null;
+  last_slot: string | null;
+  updated_at: string;
+};
+
+export async function ensureAssetWatchCursor(
+  mint: string,
+  startSlot: number,
+): Promise<AssetWatchCursorRow> {
+  const result = await database().query<AssetWatchCursorRow>(
+    `INSERT INTO asset_watch_cursors(mint,start_slot)
+     VALUES ($1,$2)
+     ON CONFLICT(mint) DO UPDATE SET
+       start_slot=LEAST(asset_watch_cursors.start_slot, EXCLUDED.start_slot)
+     RETURNING *`,
+    [mint, startSlot],
+  );
+  return result.rows[0];
+}
+
+export async function getAssetWatchCursor(
+  mint: string,
+): Promise<AssetWatchCursorRow | null> {
+  const result = await database().query<AssetWatchCursorRow>(
+    "SELECT * FROM asset_watch_cursors WHERE mint=$1",
+    [mint],
+  );
+  return result.rows[0] || null;
+}
+
+export async function advanceAssetWatchCursor(input: {
+  mint: string;
+  signature: string;
+  slot: number;
+}): Promise<void> {
+  await database().query(
+    `UPDATE asset_watch_cursors
+     SET last_signature=$2,last_slot=$3,updated_at=NOW()
+     WHERE mint=$1`,
+    [input.mint, input.signature, input.slot],
+  );
+}
+
+export async function listAssetsForWatcher(): Promise<AssetRow[]> {
+  const result = await database().query<AssetRow>(
+    "SELECT * FROM assets WHERE enabled=TRUE ORDER BY created_at ASC",
+  );
+  return result.rows;
+}
