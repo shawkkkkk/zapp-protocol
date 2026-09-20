@@ -30,6 +30,12 @@ type Inspection = {
   freezeAuthorityRevoked: boolean;
 };
 
+export type LaunchedAsset = {
+  mint: string;
+  symbol: string;
+  minimumBurn: string;
+};
+
 type PendingLaunch = {
   mint: string;
   creationSignature: string;
@@ -41,6 +47,7 @@ type PendingLaunch = {
   description: string | null;
   websiteUrl: string | null;
   xUrl: string | null;
+  minimumBurnUi: string;
 };
 
 async function waitForFinalized(signature: string): Promise<void> {
@@ -67,7 +74,14 @@ function assertMetadata(name: string, symbol: string) {
   if (cleanSymbol.length > 10) throw new Error("Ticker must be 10 characters or less");
 }
 
-export function LaunchCreator() {
+export function LaunchCreator({
+  forceEnabled = false,
+  onLaunched,
+}: {
+  forceEnabled?: boolean;
+  onLaunched?: (asset: LaunchedAsset) => void;
+} = {}) {
+  const launchEnabled = launchEnabled || forceEnabled;
   const [mode, setMode] = useState<Mode>("new");
   const { publicKey, sendTransaction, signMessage } = useUnifiedWallet();
   const [busy, setBusy] = useState(false);
@@ -227,7 +241,7 @@ export function LaunchCreator() {
 
   async function launchNew() {
     setMessage("");
-    if (!publicLaunchEnabled) {
+    if (!launchEnabled) {
       setMessage(
         "Preview mode: launches unlock after the production mainnet canary passes.",
       );
@@ -278,6 +292,7 @@ export function LaunchCreator() {
         description: description.trim() || null,
         websiteUrl: websiteUrl.trim() || null,
         xUrl: xUrl.trim() || null,
+        minimumBurnUi: minimumBurn,
       };
       setPendingLaunch(pending);
       try {
@@ -292,6 +307,14 @@ export function LaunchCreator() {
       try {
         localStorage.removeItem("zapp-pending-launch");
       } catch {}
+      if (onLaunched) {
+        onLaunched({
+          mint: built.mint,
+          symbol: pending.symbol,
+          minimumBurn: pending.minimumBurnUi,
+        });
+        return;
+      }
       window.location.href = "/asset/" + built.mint;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Launch failed");
@@ -312,6 +335,14 @@ export function LaunchCreator() {
       try {
         localStorage.removeItem("zapp-pending-launch");
       } catch {}
+      if (onLaunched) {
+        onLaunched({
+          mint,
+          symbol: pendingLaunch.symbol,
+          minimumBurn: pendingLaunch.minimumBurnUi || "",
+        });
+        return;
+      }
       window.location.href = "/asset/" + mint;
     } catch (error) {
       setMessage(
@@ -324,7 +355,7 @@ export function LaunchCreator() {
 
   async function registerExisting() {
     setMessage("");
-    if (!publicLaunchEnabled) {
+    if (!launchEnabled) {
       setMessage(
         "Preview mode: public registration unlocks after the production mainnet canary passes.",
       );
@@ -368,9 +399,18 @@ export function LaunchCreator() {
         description: description.trim() || null,
         websiteUrl: websiteUrl.trim() || null,
         xUrl: xUrl.trim() || null,
+        minimumBurnUi: minimumBurn,
       };
 
       await registerLaunch(registration);
+      if (onLaunched) {
+        onLaunched({
+          mint: registration.mint,
+          symbol: registration.symbol,
+          minimumBurn: registration.minimumBurnUi,
+        });
+        return;
+      }
       window.location.href = "/asset/" + existingMint.trim();
     } catch (error) {
       setMessage(
@@ -394,7 +434,7 @@ export function LaunchCreator() {
           <ZAppWalletButton />
         </div>
 
-        {!publicLaunchEnabled && (
+        {!launchEnabled && (
           <div className="launchgate compact">
             <b>Preview</b>
             <span>
@@ -543,7 +583,7 @@ export function LaunchCreator() {
 
             <button
               className="primary"
-              disabled={!publicLaunchEnabled || busy}
+              disabled={!launchEnabled || busy}
               onClick={launchNew}
             >
               {busy ? "Launching…" : "Create & launch"}
@@ -613,7 +653,7 @@ export function LaunchCreator() {
 
             <button
               className="primary"
-              disabled={!publicLaunchEnabled || busy}
+              disabled={!launchEnabled || busy}
               onClick={registerExisting}
             >
               {busy ? "Registering…" : "Register existing asset"}
@@ -633,7 +673,7 @@ export function LaunchCreator() {
             </div>
             <button
               className="secondary inline"
-              disabled={busy || !publicLaunchEnabled}
+              disabled={busy || !launchEnabled}
               onClick={retryPendingRegistration}
             >
               Retry registration
