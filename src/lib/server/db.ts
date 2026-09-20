@@ -597,3 +597,67 @@ export async function listNftMints(limit = 50): Promise<PublicNftRow[]> {
   );
   return result.rows;
 }
+
+
+export type AssetStats = {
+  verified_burns: number;
+  burned_base_units: string;
+  confirmed_nfts: number;
+  pending_nfts: number;
+};
+
+export async function getAssetStats(mint: string): Promise<AssetStats> {
+  const result = await database().query<{
+    verified_burns: string;
+    burned_base_units: string | null;
+    confirmed_nfts: string;
+    pending_nfts: string;
+  }>(
+    `SELECT
+       COUNT(c.burn_id)::text AS verified_burns,
+       COALESCE(SUM(c.amount_base_units), 0)::text AS burned_base_units,
+       COUNT(*) FILTER (WHERE n.status='confirmed')::text AS confirmed_nfts,
+       COUNT(*) FILTER (
+         WHERE n.status IN ('queued','building','commit_broadcast','reveal_broadcast')
+       )::text AS pending_nfts
+     FROM claims c
+     LEFT JOIN nft_mints n ON n.burn_id=c.burn_id
+     WHERE c.mint=$1`,
+    [mint],
+  );
+  const row = result.rows[0];
+  return {
+    verified_burns: Number(row?.verified_burns || "0"),
+    burned_base_units: row?.burned_base_units || "0",
+    confirmed_nfts: Number(row?.confirmed_nfts || "0"),
+    pending_nfts: Number(row?.pending_nfts || "0"),
+  };
+}
+
+export async function getNftQueueStats(): Promise<{
+  queued: number;
+  active: number;
+  confirmed: number;
+  failed: number;
+}> {
+  const result = await database().query<{
+    queued: string;
+    active: string;
+    confirmed: string;
+    failed: string;
+  }>(
+    `SELECT
+       COUNT(*) FILTER (WHERE status='queued')::text AS queued,
+       COUNT(*) FILTER (WHERE status IN ('building','commit_broadcast','reveal_broadcast'))::text AS active,
+       COUNT(*) FILTER (WHERE status='confirmed')::text AS confirmed,
+       COUNT(*) FILTER (WHERE status='failed')::text AS failed
+     FROM nft_mints`,
+  );
+  const row = result.rows[0];
+  return {
+    queued: Number(row?.queued || "0"),
+    active: Number(row?.active || "0"),
+    confirmed: Number(row?.confirmed || "0"),
+    failed: Number(row?.failed || "0"),
+  };
+}
