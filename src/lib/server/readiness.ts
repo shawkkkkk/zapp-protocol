@@ -41,6 +41,7 @@ export async function readinessChecks(): Promise<ReadinessCheck[]> {
       creation_sig_column: string | null;
       registration_sig_column: string | null;
       indexer_verified_column: string | null;
+      watch_cursors: string | null;
     }>(
       `SELECT
          to_regclass('public.claims')::text AS claims,
@@ -79,7 +80,8 @@ export async function readinessChecks(): Promise<ReadinessCheck[]> {
              AND table_name='nft_mints'
              AND column_name='indexer_verified_at'
            LIMIT 1
-         ) AS indexer_verified_column`,
+         ) AS indexer_verified_column,
+         to_regclass('public.asset_watch_cursors')::text AS watch_cursors`,
     );
     const row = schema.rows[0];
     const ok = Boolean(
@@ -91,7 +93,8 @@ export async function readinessChecks(): Promise<ReadinessCheck[]> {
       row?.min_burn_column &&
       row?.creation_sig_column &&
       row?.registration_sig_column &&
-      row?.indexer_verified_column
+      row?.indexer_verified_column &&
+      row?.watch_cursors
     );
     checks.push({
       ok,
