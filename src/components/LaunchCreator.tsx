@@ -81,7 +81,7 @@ export function LaunchCreator({
   forceEnabled?: boolean;
   onLaunched?: (asset: LaunchedAsset) => void;
 } = {}) {
-  const launchEnabled = launchEnabled || forceEnabled;
+  const launchEnabled = publicLaunchEnabled || forceEnabled;
   const [mode, setMode] = useState<Mode>("new");
   const { publicKey, sendTransaction, signMessage } = useUnifiedWallet();
   const [busy, setBusy] = useState(false);
