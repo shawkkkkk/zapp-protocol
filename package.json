@@ -47,5 +47,9 @@
   "engines": {
     "node": ">=22"
   },
-  "type": "module"
+  "type": "module",
+  "overrides": {
+    "bigint-buffer": "file:vendor/bigint-buffer",
+    "toml": "4.2.0"
+  }
 }
