@@ -2,6 +2,7 @@ import {
   bytesToHex,
   decodeClaimPayload,
   decodeOpReturnScript,
+  decodeTransferPayload,
   encodeClaimPayload,
   encodeOpReturnScript,
 } from "../protocol.ts";
@@ -56,8 +57,15 @@ type DecodedVout = {
   };
 };
 
-type DecodedTx = {
+export type DecodedVin = {
+  txid?: string;
+  vout?: number;
+  coinbase?: string;
+};
+
+export type DecodedTx = {
   txid: string;
+  vin: DecodedVin[];
   vout: DecodedVout[];
 };
 
@@ -119,6 +127,22 @@ export function findClaimPayloads(decoded: DecodedTx): Array<{ vout: number; pay
       found.push({ vout: output.n, payloadHex: bytesToHex(data) });
     } catch {
       // Not a ZApp proof.
+    }
+  }
+  return found;
+}
+
+
+export function findTransferPayloads(decoded: DecodedTx): Array<{ vout: number; burnId: string; payloadHex: string }> {
+  const found: Array<{ vout: number; burnId: string; payloadHex: string }> = [];
+  for (const output of decoded.vout || []) {
+    const data = decodeOpReturnScript(output.scriptPubKey.hex);
+    if (!data) continue;
+    try {
+      const transfer = decodeTransferPayload(data);
+      found.push({ vout: output.n, burnId: transfer.burnId, payloadHex: bytesToHex(data) });
+    } catch {
+      // Not a ZApp transfer.
     }
   }
   return found;
