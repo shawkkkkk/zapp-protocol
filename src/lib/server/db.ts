@@ -34,6 +34,7 @@ export type ClaimRow = {
   current_owner: string | null;
   owner_txid: string | null;
   owner_vout: number | null;
+  ownership_state: "tracked" | "terminal";
   status: "reserved" | "relaying" | "broadcast" | "confirmed" | "failed" | "invalidated";
   error: string | null;
   created_at: string;
@@ -210,7 +211,7 @@ export type TransferRow = {
   from_vout: number;
   to_owner: string;
   to_vout: number;
-  payload_vout: number;
+  payload_vout: number | null;
 };
 
 export async function applyIndexedTransfer(input: {
@@ -222,7 +223,7 @@ export async function applyIndexedTransfer(input: {
   fromVout: number;
   toOwner: string;
   toVout: number;
-  payloadVout: number;
+  payloadVout: number | null;
 }): Promise<boolean> {
   const client = await database().connect();
   try {
@@ -246,7 +247,7 @@ export async function applyIndexedTransfer(input: {
       `INSERT INTO transfers (
         txid,burn_id,zcash_height,zcash_tx_index,from_txid,from_vout,to_owner,to_vout,payload_vout
       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-      ON CONFLICT (txid) DO NOTHING`,
+      ON CONFLICT (txid, burn_id) DO NOTHING`,
       [
         input.txid,
         input.burnId,
@@ -261,9 +262,89 @@ export async function applyIndexedTransfer(input: {
     );
     await client.query(
       `UPDATE claims
-       SET current_owner=$2, owner_txid=$3, owner_vout=$4, updated_at=NOW()
+       SET current_owner=$2, owner_txid=$3, owner_vout=$4, ownership_state='tracked', updated_at=NOW()
        WHERE burn_id=$1`,
       [input.burnId, input.toOwner, input.txid, input.toVout],
+    );
+    await client.query("COMMIT");
+    return true;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+
+export async function getClaimByOwnerOutpoint(
+  txid: string,
+  vout: number,
+): Promise<ClaimRow | null> {
+  const result = await database().query<ClaimRow>(
+    `SELECT * FROM claims
+     WHERE status='confirmed'
+       AND ownership_state='tracked'
+       AND owner_txid=$1
+       AND owner_vout=$2
+     LIMIT 1`,
+    [txid, vout],
+  );
+  return result.rows[0] || null;
+}
+
+export async function terminateIndexedOwnership(input: {
+  burnId: string;
+  txid: string;
+  zcashHeight: number;
+  zcashTxIndex: number;
+  fromTxid: string;
+  fromVout: number;
+}): Promise<boolean> {
+  const client = await database().connect();
+  try {
+    await client.query("BEGIN");
+    const claimResult = await client.query<ClaimRow>(
+      "SELECT * FROM claims WHERE burn_id=$1 FOR UPDATE",
+      [input.burnId],
+    );
+    const claim = claimResult.rows[0];
+    if (
+      !claim ||
+      claim.status !== "confirmed" ||
+      claim.ownership_state !== "tracked" ||
+      claim.owner_txid !== input.fromTxid ||
+      claim.owner_vout !== input.fromVout
+    ) {
+      await client.query("ROLLBACK");
+      return false;
+    }
+
+    await client.query(
+      `INSERT INTO ownership_terminals (
+        burn_id,txid,zcash_height,zcash_tx_index,from_txid,from_vout
+      ) VALUES ($1,$2,$3,$4,$5,$6)
+      ON CONFLICT (burn_id) DO UPDATE SET
+        txid=EXCLUDED.txid,
+        zcash_height=EXCLUDED.zcash_height,
+        zcash_tx_index=EXCLUDED.zcash_tx_index,
+        from_txid=EXCLUDED.from_txid,
+        from_vout=EXCLUDED.from_vout`,
+      [
+        input.burnId,
+        input.txid,
+        input.zcashHeight,
+        input.zcashTxIndex,
+        input.fromTxid,
+        input.fromVout,
+      ],
+    );
+    await client.query(
+      `UPDATE claims
+       SET current_owner=NULL, owner_txid=NULL, owner_vout=NULL,
+           ownership_state='terminal', updated_at=NOW()
+       WHERE burn_id=$1`,
+      [input.burnId],
     );
     await client.query("COMMIT");
     return true;
@@ -281,7 +362,8 @@ export async function rebuildOwnershipFromTransfers(): Promise<void> {
     `UPDATE claims
      SET current_owner=recipient,
          owner_txid=zcash_txid,
-         owner_vout=recipient_vout
+         owner_vout=recipient_vout,
+         ownership_state='tracked'
      WHERE status='confirmed'`,
   );
 
@@ -297,11 +379,23 @@ export async function rebuildOwnershipFromTransfers(): Promise<void> {
       [row.burn_id],
     );
     const transfer = latest.rows[0];
-    if (!transfer) continue;
-    await db.query(
-      "UPDATE claims SET current_owner=$2, owner_txid=$3, owner_vout=$4 WHERE burn_id=$1",
-      [row.burn_id, transfer.to_owner, transfer.txid, transfer.to_vout],
+    if (transfer) {
+      await db.query(
+        "UPDATE claims SET current_owner=$2, owner_txid=$3, owner_vout=$4, ownership_state='tracked' WHERE burn_id=$1",
+        [row.burn_id, transfer.to_owner, transfer.txid, transfer.to_vout],
+      );
+    }
+
+    const terminal = await db.query<{ burn_id: string }>(
+      "SELECT burn_id FROM ownership_terminals WHERE burn_id=$1 LIMIT 1",
+      [row.burn_id],
     );
+    if (terminal.rows[0]) {
+      await db.query(
+        "UPDATE claims SET current_owner=NULL, owner_txid=NULL, owner_vout=NULL, ownership_state='terminal' WHERE burn_id=$1",
+        [row.burn_id],
+      );
+    }
   }
 }
 
