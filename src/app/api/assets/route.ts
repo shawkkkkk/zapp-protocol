@@ -49,6 +49,10 @@ export async function POST(request: NextRequest) {
       typeof body.description === "string" && body.description.trim()
         ? body.description.trim().slice(0, 500)
         : null;
+    const minBurnBaseUnits =
+      typeof body.minBurnBaseUnits === "string" && /^[1-9]\d*$/.test(body.minBurnBaseUnits.trim())
+        ? body.minBurnBaseUnits.trim()
+        : (() => { throw new Error("minBurnBaseUnits must be a positive integer string"); })();
     const imageUrl = sanitizePublicUrl(body.imageUrl);
     const websiteUrl = sanitizePublicUrl(body.websiteUrl);
     const xUrl = sanitizePublicUrl(body.xUrl);
@@ -64,6 +68,7 @@ export async function POST(request: NextRequest) {
       description,
       websiteUrl,
       xUrl,
+      minBurnBaseUnits,
     });
     const verified = await verifyLaunchRegistration({ creationSignature, mint, creator });
     const asset = await upsertAsset({
@@ -75,6 +80,7 @@ export async function POST(request: NextRequest) {
       imageUrl,
       websiteUrl,
       xUrl,
+      minBurnBaseUnits,
       tokenProgram: verified.tokenProgram,
       decimals: verified.decimals,
       launchSlot: verified.launchSlot,
