@@ -80,8 +80,11 @@ export default function Home() {
       </section>
 
       <footer className="footer shell">
-        <span>ZApp Protocol v1</span>
-        <span>Solana burn → Zcash NFT</span>
+        <span>ZApp Protocol v1 · Solana burn → Zcash NFT</span>
+        <span>
+          <a href="/docs">Docs</a> · <a href="/status">Status</a> ·{" "}
+          <a href="/explorer">Explorer</a>
+        </span>
       </footer>
     </main>
   );
