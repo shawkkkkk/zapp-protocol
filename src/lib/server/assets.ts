@@ -41,6 +41,43 @@ export async function inspectMint(mint: string): Promise<{
   };
 }
 
+
+export function assertMintCreationEvidence(input: {
+  creator: string;
+  mint: string;
+  accountKeys: string[];
+  signerCount: number;
+  preBalances?: number[] | null;
+  postBalances?: number[] | null;
+}): void {
+  const signers = input.accountKeys.slice(0, input.signerCount);
+  if (signers[0] !== input.creator) {
+    throw new Error(
+      "Creator must be the fee payer / first signer of the mint creation transaction",
+    );
+  }
+
+  const mintIndex = input.accountKeys.indexOf(input.mint);
+  if (mintIndex < 0) {
+    throw new Error("Claimed mint is not present in the creation transaction");
+  }
+
+  const mintSignedCreation = signers.includes(input.mint);
+  const preLamports = input.preBalances?.[mintIndex];
+  const postLamports = input.postBalances?.[mintIndex];
+  const programCreatedMint =
+    preLamports === 0 &&
+    typeof postLamports === "number" &&
+    Number.isSafeInteger(postLamports) &&
+    postLamports > 0;
+
+  if (!mintSignedCreation && !programCreatedMint) {
+    throw new Error(
+      "Creation proof must either be signed by the mint or create the mint account from zero balance",
+    );
+  }
+}
+
 export async function verifyLaunchRegistration(input: {
   creationSignature: string;
   mint: string;
@@ -58,29 +95,14 @@ export async function verifyLaunchRegistration(input: {
   }
 
   const signerCount = tx.transaction.message.header.numRequiredSignatures;
-  const signers = tx.transaction.message.accountKeys.slice(0, signerCount);
-  if (signers[0] !== input.creator) {
-    throw new Error("Creator must be the fee payer / first signer of the mint creation transaction");
-  }
-  const staticMintIndex = tx.transaction.message.accountKeys.indexOf(input.mint);
-  if (staticMintIndex < 0) {
-    throw new Error("Claimed mint is not present in the creation transaction");
-  }
-
-  const mintSignedCreation = signers.includes(input.mint);
-  const preLamports = tx.meta.preBalances?.[staticMintIndex];
-  const postLamports = tx.meta.postBalances?.[staticMintIndex];
-  const programCreatedMint =
-    preLamports === 0 &&
-    typeof postLamports === "number" &&
-    Number.isSafeInteger(postLamports) &&
-    postLamports > 0;
-
-  if (!mintSignedCreation && !programCreatedMint) {
-    throw new Error(
-      "Creation proof must either be signed by the mint or create the mint account from zero balance",
-    );
-  }
+  assertMintCreationEvidence({
+    creator: input.creator,
+    mint: input.mint,
+    accountKeys: tx.transaction.message.accountKeys,
+    signerCount,
+    preBalances: tx.meta.preBalances,
+    postBalances: tx.meta.postBalances,
+  });
 
   const rpc = connection();
   const mintKey = new PublicKey(input.mint);
