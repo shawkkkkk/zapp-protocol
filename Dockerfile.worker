@@ -17,4 +17,4 @@ COPY scripts ./scripts
 COPY src ./src
 COPY --from=signer /src/native/zapp-zcash-signer/target/release/zapp-zcash-signer /usr/local/bin/zapp-zcash-signer
 ENV ZAPP_INSCRIPTION_SIGNER_BIN=/usr/local/bin/zapp-zcash-signer
-CMD ["node","--experimental-strip-types","scripts/nft-worker.ts","--watch"]
+CMD ["node","--experimental-strip-types","scripts/backend-worker.ts"]
