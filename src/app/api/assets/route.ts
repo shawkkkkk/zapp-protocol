@@ -107,6 +107,7 @@ export async function POST(request: NextRequest) {
       launchSlot: verified.launchSlot,
     });
 
+    await ensureAssetWatchCursor(asset.mint, watchStartSlot);
     return NextResponse.json({ asset }, { status: 201 });
   } catch (error) {
     if (error instanceof RateLimitError) return rateLimitResponse(error);
