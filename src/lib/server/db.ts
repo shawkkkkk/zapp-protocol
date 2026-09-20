@@ -31,7 +31,7 @@ export type ClaimRow = {
   zcash_tx_index: number | null;
   recipient_vout: number | null;
   carrier_vout: number | null;
-  status: "reserved" | "broadcast" | "confirmed" | "failed" | "invalidated";
+  status: "reserved" | "relaying" | "broadcast" | "confirmed" | "failed" | "invalidated";
   error: string | null;
   created_at: string;
   updated_at: string;
@@ -88,6 +88,22 @@ export async function reserveClaim(evidence: BurnEvidence, payloadHex: string): 
   } finally {
     client.release();
   }
+}
+
+
+export async function acquireClaimRelay(burnId: string): Promise<boolean> {
+  const result = await database().query(
+    `UPDATE claims
+     SET status='relaying', error=NULL, updated_at=NOW()
+     WHERE burn_id=$1
+       AND (
+         status='reserved'
+         OR (status='relaying' AND updated_at < NOW() - INTERVAL '5 minutes')
+       )
+     RETURNING burn_id`,
+    [burnId],
+  );
+  return result.rowCount === 1;
 }
 
 export async function markClaimBroadcast(input: {
