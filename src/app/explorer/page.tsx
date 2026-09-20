@@ -8,6 +8,8 @@ type Claim = {
   mint: string;
   amountBaseUnits: string;
   recipient: string;
+  currentOwner: string | null;
+  ownerOutpoint: string | null;
   zcashTxid: string | null;
   zcashHeight: string | null;
   status: string;
@@ -38,14 +40,14 @@ export default function Explorer() {
       {error && <div className="notice">{error}</div>}
       <div className="tablewrap">
         <table>
-          <thead><tr><th>Status</th><th>Mint</th><th>Amount</th><th>Destination</th><th>Zcash</th></tr></thead>
+          <thead><tr><th>Status</th><th>Mint</th><th>Amount</th><th>Current owner</th><th>Zcash</th></tr></thead>
           <tbody>
             {claims.map((claim) => (
               <tr key={claim.burnId}>
                 <td><span className={`status ${claim.status}`}>{claim.status}</span></td>
                 <td><code>{claim.mint.slice(0, 8)}…{claim.mint.slice(-6)}</code></td>
                 <td>{claim.amountBaseUnits}</td>
-                <td><code>{claim.recipient.slice(0, 8)}…{claim.recipient.slice(-6)}</code></td>
+                <td><code>{(claim.currentOwner || claim.recipient).slice(0, 8)}…{(claim.currentOwner || claim.recipient).slice(-6)}</code></td>
                 <td><code>{claim.zcashTxid ? `${claim.zcashTxid.slice(0, 10)}…` : "pending"}</code></td>
               </tr>
             ))}
