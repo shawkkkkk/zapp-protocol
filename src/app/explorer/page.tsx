@@ -19,7 +19,6 @@ type Nft = {
   indexerVerifiedAt: string | null;
   indexerVerifiedHeight: string | null;
   error: string | null;
-  indexerVerifiedAt: string | null;
 };
 
 function formatBaseUnits(raw: string, decimals: number | null): string {
