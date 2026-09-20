@@ -12,7 +12,10 @@
     "index:zcash": "node --experimental-strip-types scripts/index-zcash.ts",
     "relay:proof": "node --experimental-strip-types scripts/relay-proof.ts",
     "transfer:proof": "node --experimental-strip-types scripts/transfer-proof.ts",
-    "state:root": "node --experimental-strip-types scripts/state-root.ts"
+    "state:root": "node --experimental-strip-types scripts/state-root.ts",
+    "build:signer": "cargo build --release --manifest-path native/zapp-zcash-signer/Cargo.toml",
+    "check:signer": "cargo check --manifest-path native/zapp-zcash-signer/Cargo.toml",
+    "worker:nft": "node --experimental-strip-types scripts/nft-worker.ts --watch"
   },
   "dependencies": {
     "@solana/spl-token": "^0.4.15",
