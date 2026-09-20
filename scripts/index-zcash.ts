@@ -1,6 +1,6 @@
 import { database, confirmIndexedClaim } from "../src/lib/server/db.ts";
 import { decodeClaimPayload, hexToBytes } from "../src/lib/protocol.ts";
-import { findBurnEvidenceByCommitment } from "../src/lib/server/solana.ts";
+import { findBurnRawByCommitment } from "../src/lib/server/solana-raw.ts";
 import { validateProofAgainstBurn } from "../src/lib/validation.ts";
 import {
   findClaimPayloads,
@@ -92,7 +92,7 @@ async function indexBlock(height: number): Promise<void> {
       continue;
     }
 
-    const burn = await findBurnEvidenceByCommitment(proof.mint, proof.burnId);
+    const burn = await findBurnRawByCommitment(proof.mint, proof.burnId);
     if (!burn) continue;
 
     const recipientVout = recipientMarkerVout(tx, burn.recipient);
